@@ -59,7 +59,7 @@ static redisContextFuncs redisContextDefaultFuncs = {
 static redisReply *createReplyObject(int type);
 static void *createStringObject(const redisReadTask *task, char *str, size_t len);
 static void *createArrayObject(const redisReadTask *task, size_t elements);
-static void *createIntegerObject(const redisReadTask *task, long long value);
+static void *createIntegerObject(const redisReadTask *task, PORT_LONGLONG value);
 static void *createDoubleObject(const redisReadTask *task, double value, char *str, size_t len);
 static void *createNilObject(const redisReadTask *task);
 static void *createBoolObject(const redisReadTask *task, int bval);
@@ -199,7 +199,7 @@ static void *createArrayObject(const redisReadTask *task, size_t elements) {
     return r;
 }
 
-static void *createIntegerObject(const redisReadTask *task, long long value) {
+static void *createIntegerObject(const redisReadTask *task, PORT_LONGLONG value) {
     redisReply *r, *parent;
 
     r = createReplyObject(REDIS_REPLY_INTEGER);
@@ -444,7 +444,7 @@ int redisvFormatCommand(char **target, const char *format, va_list ap) {
                     if (_p[0] == 'l' && _p[1] == 'l') {
                         _p += 2;
                         if (*_p != '\0' && strchr(intfmts,*_p) != NULL) {
-                            va_arg(ap,long long);
+                            va_arg(ap, PORT_LONGLONG);
                             goto fmt_valid;
                         }
                         goto fmt_invalid;
@@ -454,7 +454,7 @@ int redisvFormatCommand(char **target, const char *format, va_list ap) {
                     if (_p[0] == 'l') {
                         _p += 1;
                         if (*_p != '\0' && strchr(intfmts,*_p) != NULL) {
-                            va_arg(ap,long);
+                            va_arg(ap, PORT_LONG);
                             goto fmt_valid;
                         }
                         goto fmt_invalid;
@@ -583,11 +583,11 @@ int redisFormatCommand(char **target, const char *format, ...) {
  * lengths. If the latter is set to NULL, strlen will be used to compute the
  * argument lengths.
  */
-long long redisFormatSdsCommandArgv(hisds *target, int argc, const char **argv,
+PORT_LONGLONG redisFormatSdsCommandArgv(hisds *target, int argc, const char **argv,
                                     const size_t *argvlen)
 {
     hisds cmd, aux;
-    unsigned long long totlen, len;
+    PORT_ULONGLONG totlen, len;
     int j;
 
     /* Abort on a NULL target */
@@ -639,7 +639,7 @@ void redisFreeSdsCommand(hisds cmd) {
  * lengths. If the latter is set to NULL, strlen will be used to compute the
  * argument lengths.
  */
-long long redisFormatCommandArgv(char **target, int argc, const char **argv, const size_t *argvlen) {
+PORT_LONGLONG redisFormatCommandArgv(char **target, int argc, const char **argv, const size_t *argvlen) {
     char *cmd = NULL; /* final command */
     size_t pos; /* position in final command */
     size_t len, totlen;
@@ -1159,7 +1159,7 @@ int redisAppendCommand(redisContext *c, const char *format, ...) {
 
 int redisAppendCommandArgv(redisContext *c, int argc, const char **argv, const size_t *argvlen) {
     hisds cmd;
-    long long len;
+    PORT_LONGLONG len;
 
     len = redisFormatSdsCommandArgv(&cmd,argc,argv,argvlen);
     if (len == -1) {

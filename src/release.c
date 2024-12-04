@@ -31,10 +31,23 @@
  * file is recompiled, as we access this information in all the other
  * files using this functions. */
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
+#ifdef _WIN32
+#define REDIS_GIT_SHA1 "00000000"   /* TODO: Modify build to write them to release.h from the environment */
+#define REDIS_GIT_DIRTY "0"
+#define REDIS_BUILD_ID "0000"
+#endif
+
 #include <string.h>
 #include <stdio.h>
 
+#ifdef _WIN32
+#include "version.h"
+#else
 #include "release.h"
+#endif
 #include "crc64.h"
 
 char *redisGitSHA1(void) {
@@ -46,11 +59,11 @@ char *redisGitDirty(void) {
 }
 
 const char *redisBuildIdRaw(void) {
-    return REDIS_BUILD_ID_RAW;
+    return MEMURAI_VERSION;         WIN_PORT_FIX /* REDIS_BUILD_ID_RAW -> MEMURAI_VERSION*/
 }
 
 uint64_t redisBuildId(void) {
-    char *buildid = REDIS_BUILD_ID_RAW;
+    char *buildid = MEMURAI_VERSION;
 
     return crc64(0,(unsigned char*)buildid,strlen(buildid));
 }
@@ -62,7 +75,7 @@ char *redisBuildIdString(void) {
     static char buf[32];
     static int cached = 0;
     if (!cached) {
-        snprintf(buf,sizeof(buf),"%llx",(unsigned long long) redisBuildId());
+        snprintf(buf,sizeof(buf),"%llx",(PORT_ULONGLONG) redisBuildId());
         cached = 1;
     }
     return buf;

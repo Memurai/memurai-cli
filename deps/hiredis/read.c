@@ -159,11 +159,11 @@ static char *seekNewline(char *s, size_t len) {
  * Because of its strictness, it is safe to use this function to check if
  * you can convert a string into a long long, and obtain back the string
  * from the number without any loss in the string representation. */
-static int string2ll(const char *s, size_t slen, long long *value) {
+static int string2ll(const char *s, size_t slen, PORT_LONGLONG *value) {
     const char *p = s;
     size_t plen = 0;
     int negative = 0;
-    unsigned long long v;
+    PORT_ULONGLONG v;
 
     if (plen == slen)
         return REDIS_ERR;
@@ -211,9 +211,9 @@ static int string2ll(const char *s, size_t slen, long long *value) {
         return REDIS_ERR;
 
     if (negative) {
-        if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
+        if (v > ((PORT_ULONGLONG)(-(LLONG_MIN+1))+1)) /* Overflow. */
             return REDIS_ERR;
-        if (value != NULL) *value = -v;
+        if (value != NULL) *value = -(PORT_LONGLONG)v;
     } else {
         if (v > LLONG_MAX) /* Overflow. */
             return REDIS_ERR;
@@ -273,7 +273,7 @@ static int processLineItem(redisReader *r) {
 
     if ((p = readLine(r,&len)) != NULL) {
         if (cur->type == REDIS_REPLY_INTEGER) {
-            long long v;
+            PORT_LONGLONG v;
 
             if (string2ll(p, len, &v) == REDIS_ERR) {
                 __redisReaderSetError(r,REDIS_ERR_PROTOCOL,
@@ -398,8 +398,8 @@ static int processBulkItem(redisReader *r) {
     redisReadTask *cur = r->task[r->ridx];
     void *obj = NULL;
     char *p, *s;
-    long long len;
-    unsigned long bytelen;
+    PORT_LONGLONG len;
+    PORT_ULONG bytelen;
     int success = 0;
 
     p = r->buf+r->pos;
@@ -414,7 +414,7 @@ static int processBulkItem(redisReader *r) {
             return REDIS_ERR;
         }
 
-        if (len < -1 || (LLONG_MAX > SIZE_MAX && len > (long long)SIZE_MAX)) {
+        if (len < -1 || (LLONG_MAX > SIZE_MAX && len > (PORT_LONGLONG)SIZE_MAX)) {
             __redisReaderSetError(r,REDIS_ERR_PROTOCOL,
                     "Bulk string length out of range");
             return REDIS_ERR;
@@ -496,7 +496,7 @@ static int processAggregateItem(redisReader *r) {
     redisReadTask *cur = r->task[r->ridx];
     void *obj;
     char *p;
-    long long elements;
+    PORT_LONGLONG elements;
     int root = 0, len;
 
     if (r->ridx == r->tasks - 1) {
@@ -617,6 +617,11 @@ static int processItem(redisReader *r) {
             case '(':
                 cur->type = REDIS_REPLY_BIGNUM;
                 break;
+#ifdef _WIN32
+            case '\0':
+                r->pos--;
+                return REDIS_ERR;
+#endif
             default:
                 __redisReaderSetErrorProtocolByte(r,*p);
                 return REDIS_ERR;

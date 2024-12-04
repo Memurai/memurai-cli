@@ -40,6 +40,11 @@
 #define _EL_DEL_READ(ctx) do { \
         if ((ctx)->ev.delRead) (ctx)->ev.delRead((ctx)->ev.data); \
     } while(0)
+#ifdef _WIN32
+#define _EL_FORCE_ADD_READ(ctx) do { \
+        if ((ctx)->ev.forceAddRead) (ctx)->ev.forceAddRead((ctx)->ev.data); \
+    } while (0)
+#endif
 #define _EL_ADD_WRITE(ctx)                                          \
     do {                                                            \
         refreshTimeout(ctx);                                        \

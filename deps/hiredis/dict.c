@@ -33,6 +33,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "../../src/Win32_Interop/win32_types_hiredis.h"
+
 #include "fmacros.h"
 #include "alloc.h"
 #include <stdlib.h>
@@ -43,12 +45,13 @@
 /* -------------------------- private prototypes ---------------------------- */
 
 static int _dictExpandIfNeeded(dict *ht);
-static unsigned long _dictNextPower(unsigned long size);
+static PORT_ULONG _dictNextPower(PORT_ULONG size);
 static int _dictKeyIndex(dict *ht, const void *key);
 static int _dictInit(dict *ht, dictType *type, void *privDataPtr);
 
 /* -------------------------- hash functions -------------------------------- */
 
+#ifdef REMOVED_SERVER_CODE
 /* Generic hash function (a popular one from Bernstein).
  * I tested a few and this was the best. */
 static unsigned int dictGenHashFunction(const unsigned char *buf, int len) {
@@ -58,6 +61,7 @@ static unsigned int dictGenHashFunction(const unsigned char *buf, int len) {
         hash = ((hash << 5) + hash) + (*buf++); /* hash * 33 + c */
     return hash;
 }
+#endif
 
 /* ----------------------------- API implementation ------------------------- */
 
@@ -70,6 +74,7 @@ static void _dictReset(dict *ht) {
     ht->used = 0;
 }
 
+#ifdef REMOVED_SERVER_CODE
 /* Create a new hash table */
 static dict *dictCreate(dictType *type, void *privDataPtr) {
     dict *ht = hi_malloc(sizeof(*ht));
@@ -79,6 +84,7 @@ static dict *dictCreate(dictType *type, void *privDataPtr) {
     _dictInit(ht,type,privDataPtr);
     return ht;
 }
+#endif
 
 /* Initialize the hash table */
 static int _dictInit(dict *ht, dictType *type, void *privDataPtr) {
@@ -89,9 +95,9 @@ static int _dictInit(dict *ht, dictType *type, void *privDataPtr) {
 }
 
 /* Expand or create the hashtable */
-static int dictExpand(dict *ht, unsigned long size) {
+static int dictExpand(dict *ht, PORT_ULONG size) {
     dict n; /* the new hashtable */
-    unsigned long realsize = _dictNextPower(size), i;
+    PORT_ULONG realsize = _dictNextPower(size), i;
 
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hashtable */
@@ -223,7 +229,7 @@ static int dictDelete(dict *ht, const void *key) {
 
 /* Destroy an entire hash table */
 static int _dictClear(dict *ht) {
-    unsigned long i;
+    PORT_ULONG i;
 
     /* Free all the elements */
     for (i = 0; i < ht->size && ht->used > 0; i++) {
@@ -308,10 +314,10 @@ static int _dictExpandIfNeeded(dict *ht) {
 }
 
 /* Our hash table capability is a power of two */
-static unsigned long _dictNextPower(unsigned long size) {
-    unsigned long i = DICT_HT_INITIAL_SIZE;
+static PORT_ULONG _dictNextPower(PORT_ULONG size) {
+    PORT_ULONG i = DICT_HT_INITIAL_SIZE;
 
-    if (size >= LONG_MAX) return LONG_MAX;
+    if (size >= PORT_LONG_MAX) return PORT_LONG_MAX;
     while(1) {
         if (i >= size)
             return i;

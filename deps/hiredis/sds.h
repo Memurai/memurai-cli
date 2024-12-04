@@ -34,6 +34,10 @@
 #define HIREDIS_SDS_H
 
 #define HI_SDS_MAX_PREALLOC (1024*1024)
+
+#include "../../src/Win32_Interop/Win32_Portability.h"
+#include "../../src/Win32_Interop/win32_types_hiredis.h"
+
 #ifdef _MSC_VER
 typedef long long ssize_t;
 #define SSIZE_MAX (LLONG_MAX >> 1)
@@ -48,6 +52,45 @@ typedef long long ssize_t;
 
 typedef char *hisds;
 
+#ifdef _WIN32
+#define PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop) )
+
+/* Note: sdshdr5 is never used, we just access the flags byte directly.
+* However is here to document the layout of type 5 SDS strings. */
+PACK(
+    struct hisdshdr5 {
+    unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
+    char buf[];
+};)
+PACK(
+    struct hisdshdr8 {
+    uint8_t len; /* used */
+    uint8_t alloc; /* excluding the header and null terminator */
+    unsigned char flags; /* 3 lsb of type, 5 unused bits */
+    char buf[];
+};)
+PACK(
+    struct hisdshdr16 {
+    uint16_t len; /* used */
+    uint16_t alloc; /* excluding the header and null terminator */
+    unsigned char flags; /* 3 lsb of type, 5 unused bits */
+    char buf[];
+};)
+PACK(
+    struct hisdshdr32 {
+    uint32_t len; /* used */
+    uint32_t alloc; /* excluding the header and null terminator */
+    unsigned char flags; /* 3 lsb of type, 5 unused bits */
+    char buf[];
+};)
+PACK(
+    struct hisdshdr64 {
+    uint64_t len; /* used */
+    uint64_t alloc; /* excluding the header and null terminator */
+    unsigned char flags; /* 3 lsb of type, 5 unused bits */
+    char buf[];
+};)
+#else
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
 struct __attribute__ ((__packed__)) hisdshdr5 {
@@ -78,6 +121,7 @@ struct __attribute__ ((__packed__)) hisdshdr64 {
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
     char buf[];
 };
+#endif
 
 #define HI_SDS_TYPE_5  0
 #define HI_SDS_TYPE_8  1
@@ -251,7 +295,7 @@ hisds *hi_sdssplitlen(const char *s, int len, const char *sep, int seplen, int *
 void hi_sdsfreesplitres(hisds *tokens, int count);
 void hi_sdstolower(hisds s);
 void hi_sdstoupper(hisds s);
-hisds hi_sdsfromlonglong(long long value);
+hisds hi_sdsfromlonglong(PORT_LONGLONG value);
 hisds hi_sdscatrepr(hisds s, const char *p, size_t len);
 hisds *hi_sdssplitargs(const char *line, int *argc);
 hisds hi_sdsmapchars(hisds s, const char *from, const char *to, size_t setlen);

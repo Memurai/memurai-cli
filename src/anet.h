@@ -49,25 +49,31 @@
 #undef ip_len
 #endif
 
+#ifdef REMOVED_SERVER_CODE
 int anetTcpNonBlockConnect(char *err, const char *addr, int port);
 int anetTcpNonBlockBestEffortBindConnect(char *err, const char *addr, int port, const char *source_addr);
+#endif // REMOVED_SERVER_CODE
 int anetResolve(char *err, char *host, char *ipbuf, size_t ipbuf_len, int flags);
+#ifdef REMOVED_SERVER_CODE
 int anetTcpServer(char *err, int port, char *bindaddr, int backlog);
 int anetTcp6Server(char *err, int port, char *bindaddr, int backlog);
 int anetUnixServer(char *err, char *path, mode_t perm, int backlog);
 int anetTcpAccept(char *err, int serversock, char *ip, size_t ip_len, int *port);
 int anetUnixAccept(char *err, int serversock);
+#endif // REMOVED_SERVER_CODE
 int anetNonBlock(char *err, int fd);
 int anetBlock(char *err, int fd);
 int anetCloexec(int fd);
 int anetEnableTcpNoDelay(char *err, int fd);
 int anetDisableTcpNoDelay(char *err, int fd);
-int anetSendTimeout(char *err, int fd, long long ms);
-int anetRecvTimeout(char *err, int fd, long long ms);
+int anetSendTimeout(char *err, int fd, PORT_LONGLONG ms);
+int anetRecvTimeout(char *err, int fd, PORT_LONGLONG ms);
 int anetFdToString(int fd, char *ip, size_t ip_len, int *port, int remote);
 int anetKeepAlive(char *err, int fd, int interval);
 int anetFormatAddr(char *fmt, size_t fmt_len, char *ip, int port);
+#ifdef REMOVED_SERVER_CODE
 int anetPipe(int fds[2], int read_flags, int write_flags);
+#endif // REMOVED_SERVER_CODE
 int anetSetSockMarkId(char *err, int fd, uint32_t id);
 int anetGetError(int fd);
 int anetIsFifo(char *filepath);

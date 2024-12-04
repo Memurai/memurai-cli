@@ -25,6 +25,10 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+#ifdef _WIN32
+#define strncasecmp _strnicmp
+#endif
+
 /* Size: Total bytes allocated to *buf
  * Length: String length, excluding optional NULL terminator.
  * Dynamic: True if created via strbuf_new()

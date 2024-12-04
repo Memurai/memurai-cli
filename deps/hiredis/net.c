@@ -247,10 +247,10 @@ int redisContextSetTcpUserTimeout(redisContext *c, unsigned int timeout) {
 
 #define __MAX_MSEC (((LONG_MAX) - 999) / 1000)
 
-static int redisContextTimeoutMsec(redisContext *c, long *result)
+static int redisContextTimeoutMsec(redisContext *c, PORT_LONG *result)
 {
     const struct timeval *timeout = c->connect_timeout;
-    long msec = -1;
+    PORT_LONG msec = -1;
 
     /* Only use timeout when not NULL. */
     if (timeout != NULL) {
@@ -271,7 +271,7 @@ static int redisContextTimeoutMsec(redisContext *c, long *result)
     return REDIS_OK;
 }
 
-static int redisContextWaitReady(redisContext *c, long msec) {
+static int redisContextWaitReady(redisContext *c, PORT_LONG msec) {
     struct pollfd   wfd[1];
 
     wfd[0].fd     = c->fd;
@@ -423,7 +423,7 @@ static int _redisContextConnectTcp(redisContext *c, const char *addr, int port,
     int blocking = (c->flags & REDIS_BLOCK);
     int reuseaddr = (c->flags & REDIS_REUSEADDR);
     int reuses = 0;
-    long timeout_msec = -1;
+    PORT_LONG timeout_msec = -1;
 
     servinfo = NULL;
     c->connection_type = REDIS_CONN_TCP;

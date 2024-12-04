@@ -28,6 +28,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
 
 #include <stdlib.h>
 #include "adlist.h"
@@ -56,7 +58,7 @@ list *listCreate(void)
 /* Remove all the elements from the list without destroying the list itself. */
 void listEmpty(list *list)
 {
-    unsigned long len;
+    PORT_ULONG len;
     listNode *current, *next;
 
     current = list->head;
@@ -343,7 +345,7 @@ listNode *listSearchKey(list *list, void *key)
  * and so on. Negative integers are used in order to count
  * from the tail, -1 is the last element, -2 the penultimate
  * and so on. If the index is out of range NULL is returned. */
-listNode *listIndex(list *list, long index) {
+listNode *listIndex(list *list, PORT_LONG index) {
     listNode *n;
 
     if (index < 0) {

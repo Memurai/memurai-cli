@@ -34,7 +34,7 @@
 #include "sds.h"
 
 /* The maximum number of characters needed to represent a long double
- * as a string (long double has a huge range of some 4952 chars, see LDBL_MAX).
+ * as a string (PORT_LONGDOUBLE has a huge range of some 4952 chars, see LDBL_MAX).
  * This should be the size of the buffer given to ld2string */
 #define MAX_LONG_DOUBLE_CHARS 5*1024
 
@@ -60,33 +60,37 @@ typedef enum {
 int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
 int stringmatch(const char *p, const char *s, int nocase);
 int stringmatchlen_fuzz_test(void);
-unsigned long long memtoull(const char *p, int *err);
+PORT_ULONGLONG memtoull(const char *p, int *err);
 const char *mempbrk(const char *s, size_t len, const char *chars, size_t charslen);
 char *memmapchars(char *s, size_t len, const char *from, const char *to, size_t setlen);
 uint32_t digits10(uint64_t v);
 uint32_t sdigits10(int64_t v);
-int ll2string(char *s, size_t len, long long value);
-int ull2string(char *s, size_t len, unsigned long long value);
-int string2ll(const char *s, size_t slen, long long *value);
-int string2ull(const char *s, unsigned long long *value);
-int string2l(const char *s, size_t slen, long *value);
-int string2ld(const char *s, size_t slen, long double *dp);
+int ll2string(char *s, size_t len, PORT_LONGLONG value);
+int ull2string(char *s, size_t len, PORT_ULONGLONG value);
+int string2ll(const char *s, size_t slen, PORT_LONGLONG *value);
+int string2ull(const char *s, PORT_ULONGLONG *value);
+int string2l(const char *s, size_t slen, PORT_LONG *value);
+int string2ld(const char *s, size_t slen, PORT_LONGDOUBLE *dp);
 int string2d(const char *s, size_t slen, double *dp);
 int trimDoubleString(char *buf, size_t len);
 int d2string(char *buf, size_t len, double value);
 int fixedpoint_d2string(char *dst, size_t dstlen, double dvalue, int fractional_digits);
-int ld2string(char *buf, size_t len, long double value, ld2string_mode mode);
-int double2ll(double d, long long *out);
+int ld2string(char *buf, size_t len, PORT_LONGDOUBLE value, ld2string_mode mode);
+int double2ll(double d, PORT_LONGLONG *out);
 int yesnotoi(char *s);
+#ifdef REMOVED_SERVER_CODE
 sds getAbsolutePath(char *filename);
-long getTimeZone(void);
+#endif // REMOVED_SERVER_CODE
+PORT_LONG getTimeZone(void);
 int pathIsBaseName(char *path);
 int dirCreateIfMissing(char *dname);
 int dirExists(char *dname);
 int dirRemove(char *dname);
 int fileExist(char *filename);
 sds makePath(char *path, char *filename);
+#ifdef REMOVED_SERVER_CODE
 int fsyncFileDir(const char *filename);
+#endif // REMOVED_SERVER_CODE
 int reclaimFilePageCache(int fd, size_t offset, size_t length);
 
 size_t redis_strlcpy(char *dst, const char *src, size_t dsize);

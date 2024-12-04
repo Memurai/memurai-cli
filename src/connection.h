@@ -34,7 +34,9 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#ifndef _WIN32
 #include <sys/uio.h>
+#endif
 
 #include "ae.h"
 
@@ -75,22 +77,28 @@ typedef struct ConnectionType {
     int (*configure)(void *priv, int reconfigure);
 
     /* ae & accept & listen & error & address handler */
+#ifdef REMOVED_SERVER_CODE
     void (*ae_handler)(struct aeEventLoop *el, int fd, void *clientData, int mask);
     aeFileProc *accept_handler;
     int (*addr)(connection *conn, char *ip, size_t ip_len, int *port, int remote);
+#endif // REMOVED_SERVER_CODE
     int (*is_local)(connection *conn);
+#ifdef REMOVED_SERVER_CODE
     int (*listen)(connListener *listener);
+#endif // REMOVED_SERVER_CODE
 
     /* create/shutdown/close connection */
     connection* (*conn_create)(void);
     connection* (*conn_create_accepted)(int fd, void *priv);
     void (*shutdown)(struct connection *conn);
-    void (*close)(struct connection *conn);
+    void (*IF_WIN32(close_win, close))(struct connection *conn);
 
     /* connect & accept */
     int (*connect)(struct connection *conn, const char *addr, int port, const char *source_addr, ConnectionCallbackFunc connect_handler);
-    int (*blocking_connect)(struct connection *conn, const char *addr, int port, long long timeout);
+    int (*blocking_connect)(struct connection *conn, const char *addr, int port, PORT_LONGLONG timeout);
+#ifdef REMOVED_SERVER_CODE
     int (*accept)(struct connection *conn, ConnectionCallbackFunc accept_handler);
+#endif // REMOVED_SERVER_CODE
 
     /* IO */
     int (*write)(struct connection *conn, const void *data, size_t data_len);
@@ -99,9 +107,9 @@ typedef struct ConnectionType {
     int (*set_write_handler)(struct connection *conn, ConnectionCallbackFunc handler, int barrier);
     int (*set_read_handler)(struct connection *conn, ConnectionCallbackFunc handler);
     const char *(*get_last_error)(struct connection *conn);
-    ssize_t (*sync_write)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
-    ssize_t (*sync_read)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
-    ssize_t (*sync_readline)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
+    ssize_t (*sync_write)(struct connection *conn, char *ptr, ssize_t size, PORT_LONGLONG timeout);
+    ssize_t (*sync_read)(struct connection *conn, char *ptr, ssize_t size, PORT_LONGLONG timeout);
+    ssize_t (*sync_readline)(struct connection *conn, char *ptr, ssize_t size, PORT_LONGLONG timeout);
 
     /* pending data */
     int (*has_pending_data)(void);
@@ -138,6 +146,7 @@ struct connListener {
     void *priv; /* used by connection type specified data */
 };
 
+#ifdef REMOVED_SERVER_CODE
 /* The connection module does not deal with listening and accepting sockets,
  * so we assume we have a socket when an incoming connection is created.
  *
@@ -159,6 +168,7 @@ struct connListener {
 static inline int connAccept(connection *conn, ConnectionCallbackFunc accept_handler) {
     return conn->type->accept(conn, accept_handler);
 }
+#endif // REMOVED_SERVER_CODE
 
 /* Establish a connection.  The connect_handler will be called when the connection
  * is established, or if an error has occurred.
@@ -180,7 +190,7 @@ static inline int connConnect(connection *conn, const char *addr, int port, cons
  * connections, but should probably be refactored out of cluster.c and replication.c,
  * in favor of a pure async implementation.
  */
-static inline int connBlockingConnect(connection *conn, const char *addr, int port, long long timeout) {
+static inline int connBlockingConnect(connection *conn, const char *addr, int port, PORT_LONGLONG timeout) {
     return conn->type->blocking_connect(conn, addr, port, timeout);
 }
 
@@ -248,7 +258,7 @@ static inline void connShutdown(connection *conn) {
 }
 
 static inline void connClose(connection *conn) {
-    conn->type->close(conn);
+    conn->type->IF_WIN32(close_win, close)(conn);
 }
 
 /* Returns the last error encountered by the connection, as a string.  If no error,
@@ -258,15 +268,15 @@ static inline const char *connGetLastError(connection *conn) {
     return conn->type->get_last_error(conn);
 }
 
-static inline ssize_t connSyncWrite(connection *conn, char *ptr, ssize_t size, long long timeout) {
+static inline ssize_t connSyncWrite(connection *conn, char *ptr, ssize_t size, PORT_LONGLONG timeout) {
     return conn->type->sync_write(conn, ptr, size, timeout);
 }
 
-static inline ssize_t connSyncRead(connection *conn, char *ptr, ssize_t size, long long timeout) {
+static inline ssize_t connSyncRead(connection *conn, char *ptr, ssize_t size, PORT_LONGLONG timeout) {
     return conn->type->sync_read(conn, ptr, size, timeout);
 }
 
-static inline ssize_t connSyncReadLine(connection *conn, char *ptr, ssize_t size, long long timeout) {
+static inline ssize_t connSyncReadLine(connection *conn, char *ptr, ssize_t size, PORT_LONGLONG timeout) {
     return conn->type->sync_readline(conn, ptr, size, timeout);
 }
 
@@ -279,6 +289,7 @@ static inline int connLastErrorRetryable(connection *conn) {
     return conn->last_errno == EINTR;
 }
 
+#ifdef REMOVED_SERVER_CODE
 /* Get address information of a connection.
  * remote works as boolean type to get local/remote address */
 static inline int connAddr(connection *conn, char *ip, size_t ip_len, int *port, int remote) {
@@ -288,6 +299,7 @@ static inline int connAddr(connection *conn, char *ip, size_t ip_len, int *port,
 
     return -1;
 }
+#endif // REMOVED_SERVER_CODE
 
 /* Format an IP,port pair into something easy to parse. If IP is IPv6
  * (matches for ":"), the ip is surrounded by []. IP and port are just
@@ -297,6 +309,7 @@ static inline int formatAddr(char *buf, size_t buf_len, char *ip, int port) {
            "[%s]:%d" : "%s:%d", ip, port);
 }
 
+#ifdef REMOVED_SERVER_CODE
 static inline int connFormatAddr(connection *conn, char *buf, size_t buf_len, int remote)
 {
     char ip[CONN_ADDR_STR_LEN];
@@ -316,6 +329,7 @@ static inline int connAddrPeerName(connection *conn, char *ip, size_t ip_len, in
 static inline int connAddrSockName(connection *conn, char *ip, size_t ip_len, int *port) {
     return connAddr(conn, ip, ip_len, port, 0);
 }
+#endif // REMOVED_SERVER_CODE
 
 /* Test a connection is local or loopback.
  * Return -1 on failure, 0 is not a local connection, 1 is a local connection */
@@ -367,8 +381,8 @@ int connNonBlock(connection *conn);
 int connEnableTcpNoDelay(connection *conn);
 int connDisableTcpNoDelay(connection *conn);
 int connKeepAlive(connection *conn, int interval);
-int connSendTimeout(connection *conn, long long ms);
-int connRecvTimeout(connection *conn, long long ms);
+int connSendTimeout(connection *conn, PORT_LONGLONG ms);
+int connRecvTimeout(connection *conn, PORT_LONGLONG ms);
 
 /* Get cert for the secure connection */
 static inline sds connGetPeerCert(connection *conn) {
@@ -427,6 +441,7 @@ int connTypeHasPendingData(void);
 /* walk all the connection types and process pending data for each connection type */
 int connTypeProcessPendingData(void);
 
+#ifdef REMOVED_SERVER_CODE
 /* Listen on an initialized listener */
 static inline int connListen(connListener *listener) {
     return listener->ct->listen(listener);
@@ -438,6 +453,7 @@ static inline aeFileProc *connAcceptHandler(ConnectionType *ct) {
         return ct->accept_handler;
     return NULL;
 }
+#endif // REMOVED_SERVER_CODE
 
 /* Get Listeners information, note that caller should free the non-empty string */
 sds getListensInfoString(sds info);

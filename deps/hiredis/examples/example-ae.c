@@ -1,3 +1,6 @@
+#include "../../../src/Win32_Interop/Win32_Portability.h"
+#include "../../../src/Win32_Interop/win32_types_hiredis.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,7 +44,12 @@ void disconnectCallback(const redisAsyncContext *c, int status) {
 }
 
 int main (int argc, char **argv) {
+#ifndef _WIN32
     signal(SIGPIPE, SIG_IGN);
+#else
+    /* For Win32_IOCP the event loop must be created before the async connect */
+    loop = aeCreateEventLoop(1024 * 10);
+#endif
 
     redisAsyncContext *c = redisAsyncConnect("127.0.0.1", 6379);
     if (c->err) {
@@ -50,7 +58,9 @@ int main (int argc, char **argv) {
         return 1;
     }
 
+#ifndef _WIN32
     loop = aeCreateEventLoop(64);
+#endif
     redisAeAttach(loop, c);
     redisAsyncSetConnectCallback(c,connectCallback);
     redisAsyncSetDisconnectCallback(c,disconnectCallback);

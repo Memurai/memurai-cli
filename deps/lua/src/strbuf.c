@@ -22,6 +22,9 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "../../../src/Win32_Interop/Win32_Portability.h"
+#include "../../../src/Win32_Interop/win32_types_hiredis.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -85,8 +88,8 @@ strbuf_t *strbuf_new(size_t len)
 static inline void debug_stats(strbuf_t *s)
 {
     if (s->debug) {
-        fprintf(stderr, "strbuf(%lx) reallocs: %d, length: %zd, size: %zd\n",
-                (long)s, s->reallocs, s->length, s->size);
+        fprintf(stderr, "strbuf(%zx) reallocs: %d, length: %zd, size: %zd\n",    WIN_PORT_FIX /* %lx -> %zx */
+                (PORT_LONG)s, s->reallocs, s->length, s->size);
     }
 }
 
@@ -163,8 +166,8 @@ void strbuf_resize(strbuf_t *s, size_t len)
     newsize = calculate_new_size(s, len);
 
     if (s->debug > 1) {
-        fprintf(stderr, "strbuf(%lx) resize: %zd => %zd\n",
-                (long)s, s->size, newsize);
+        fprintf(stderr, "strbuf(%zx) resize: %zd => %zd\n",        WIN_PORT_FIX /* %lx -> %zx */
+                (PORT_LONG)s, s->size, newsize);
     }
 
     s->size = newsize;

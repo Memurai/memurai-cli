@@ -85,15 +85,15 @@ static void millisleep(int ms)
 #endif
 }
 
-static long long usec(void) {
+static PORT_LONGLONG usec(void) {
 #ifndef _MSC_VER
     struct timeval tv;
     gettimeofday(&tv,NULL);
-    return (((long long)tv.tv_sec)*1000000)+tv.tv_usec;
+    return (((PORT_LONGLONG)tv.tv_sec)*1000000)+tv.tv_usec;
 #else
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
-    return (((long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime) / 10;
+    return (((PORT_LONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime) / 10;
 #endif
 }
 
@@ -329,13 +329,13 @@ static void test_format_commands(void) {
     INTEGER_WIDTH_TEST("d", int);
     INTEGER_WIDTH_TEST("hhd", char);
     INTEGER_WIDTH_TEST("hd", short);
-    INTEGER_WIDTH_TEST("ld", long);
-    INTEGER_WIDTH_TEST("lld", long long);
+    INTEGER_WIDTH_TEST("ld", PORT_LONG);
+    INTEGER_WIDTH_TEST("lld", PORT_LONGLONG);
     INTEGER_WIDTH_TEST("u", unsigned int);
     INTEGER_WIDTH_TEST("hhu", unsigned char);
     INTEGER_WIDTH_TEST("hu", unsigned short);
-    INTEGER_WIDTH_TEST("lu", unsigned long);
-    INTEGER_WIDTH_TEST("llu", unsigned long long);
+    INTEGER_WIDTH_TEST("lu", PORT_ULONG);
+    INTEGER_WIDTH_TEST("llu", PORT_ULONGLONG);
     FLOAT_WIDTH_TEST(float);
     FLOAT_WIDTH_TEST(double);
 
@@ -1391,7 +1391,7 @@ static void test_throughput(struct config config) {
     redisContext *c = do_connect(config);
     redisReply **replies;
     int i, num;
-    long long t1, t2;
+    PORT_LONGLONG t1, t2;
 
     test("Throughput:\n");
     for (i = 0; i < 500; i++)

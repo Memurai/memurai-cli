@@ -60,9 +60,9 @@ typedef struct dictType {
 typedef struct dict {
     dictEntry **table;
     dictType *type;
-    unsigned long size;
-    unsigned long sizemask;
-    unsigned long used;
+    PORT_ULONG size;
+    PORT_ULONG sizemask;
+    PORT_ULONG used;
     void *privdata;
 } dict;
 
@@ -111,9 +111,11 @@ typedef struct dictIterator {
 #define dictSize(ht) ((ht)->used)
 
 /* API */
+#ifdef REMOVED_SERVER_CODE
 static unsigned int dictGenHashFunction(const unsigned char *buf, int len);
 static dict *dictCreate(dictType *type, void *privDataPtr);
-static int dictExpand(dict *ht, unsigned long size);
+#endif
+static int dictExpand(dict *ht, PORT_ULONG size);
 static int dictAdd(dict *ht, void *key, void *val);
 static int dictReplace(dict *ht, void *key, void *val);
 static int dictDelete(dict *ht, const void *key);

@@ -31,6 +31,9 @@
 #ifndef __ZMALLOC_H
 #define __ZMALLOC_H
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
 /* Double expansion needed for stringification of macro values. */
 #define __xstr(s) __str(s)
 #define __str(s) #s
@@ -100,6 +103,9 @@
 #define HAVE_DEFRAG
 #endif
 
+#ifdef _WIN32
+#define __attribute__(x)
+#endif
 /* 'noinline' attribute is intended to prevent the `-Wstringop-overread` warning
  * when using gcc-12 later with LTO enabled. It may be removed once the
  * bug[https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96503] is fixed. */
@@ -125,8 +131,8 @@ size_t zmalloc_get_rss(void);
 int zmalloc_get_allocator_info(size_t *allocated, size_t *active, size_t *resident);
 void set_jemalloc_bg_thread(int enable);
 int jemalloc_purge(void);
-size_t zmalloc_get_private_dirty(long pid);
-size_t zmalloc_get_smap_bytes_by_field(char *field, long pid);
+size_t zmalloc_get_private_dirty(PORT_LONG pid);
+size_t zmalloc_get_smap_bytes_by_field(char *field, PORT_LONG pid);
 size_t zmalloc_get_memory_size(void);
 void zlibc_free(void *ptr);
 void zmadvise_dontneed(void *ptr);
@@ -155,10 +161,12 @@ size_t zmalloc_usable_size(void *ptr);
  * The implementation returns the pointer as is; the only reason for its existence is as a conduit for the
  * alloc_size attribute. This cannot be a static inline because gcc then loses the attributes on the function.
  * See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96503 */
+#ifndef _WIN32
 __attribute__((alloc_size(2),noinline)) void *extend_to_usable(void *ptr, size_t size);
 #endif
+#endif
 
-int get_proc_stat_ll(int i, long long *res);
+int get_proc_stat_ll(int i, PORT_LONGLONG *res);
 
 #ifdef REDIS_TEST
 int zmalloc_test(int argc, char **argv, int flags);

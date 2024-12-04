@@ -13,9 +13,11 @@
 *********************************************************************/
 
 /*************************** HEADER FILES ***************************/
+#include "sha256.h"
 #include <stdlib.h>
 #include <string.h>
-#include "sha256.h"
+
+#define WORD uint32_t   // WIN_PORT_FIX: define instead of typedef because windows already typedefs WORD as unsigned short
 
 /****************************** MACROS ******************************/
 #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))

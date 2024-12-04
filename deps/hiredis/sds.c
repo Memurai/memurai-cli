@@ -431,9 +431,9 @@ hisds hi_sdscpy(hisds s, const char *t) {
  * The function returns the length of the null-terminated string
  * representation stored at 's'. */
 #define HI_SDS_LLSTR_SIZE 21
-int hi_sdsll2str(char *s, long long value) {
+int hi_sdsll2str(char *s, PORT_LONGLONG value) {
     char *p, aux;
-    unsigned long long v;
+    PORT_ULONGLONG v;
     size_t l;
 
     /* Generate the string representation, this method produces
@@ -463,7 +463,7 @@ int hi_sdsll2str(char *s, long long value) {
 }
 
 /* Identical hi_sdsll2str(), but for unsigned long long type. */
-int hi_sdsull2str(char *s, unsigned long long v) {
+int hi_sdsull2str(char *s, PORT_ULONGLONG v) {
     char *p, aux;
     size_t l;
 
@@ -495,7 +495,7 @@ int hi_sdsull2str(char *s, unsigned long long v) {
  *
  * hi_sdscatprintf(hi_sdsempty(),"%lld\n", value);
  */
-hisds hi_sdsfromlonglong(long long value) {
+hisds hi_sdsfromlonglong(PORT_LONGLONG value) {
     char buf[HI_SDS_LLSTR_SIZE];
     int len = hi_sdsll2str(buf,value);
 
@@ -583,7 +583,7 @@ hisds hi_sdscatprintf(hisds s, const char *fmt, ...) {
  */
 hisds hi_sdscatfmt(hisds s, char const *fmt, ...) {
     const char *f = fmt;
-    long i;
+    PORT_LONG i;
     va_list ap;
 
     va_start(ap,fmt);
@@ -591,8 +591,8 @@ hisds hi_sdscatfmt(hisds s, char const *fmt, ...) {
     while(*f) {
         char next, *str;
         size_t l;
-        long long num;
-        unsigned long long unum;
+        PORT_LONGLONG num;
+        PORT_ULONGLONG unum;
 
         /* Make sure there is always space for at least 1 char. */
         if (hi_sdsavail(s)==0) {
@@ -622,7 +622,7 @@ hisds hi_sdscatfmt(hisds s, char const *fmt, ...) {
                 if (next == 'i')
                     num = va_arg(ap,int);
                 else
-                    num = va_arg(ap,long long);
+                    num = va_arg(ap, PORT_LONGLONG);
                 {
                     char buf[HI_SDS_LLSTR_SIZE];
                     l = hi_sdsll2str(buf,num);
@@ -640,7 +640,7 @@ hisds hi_sdscatfmt(hisds s, char const *fmt, ...) {
                 if (next == 'u')
                     unum = va_arg(ap,unsigned int);
                 else
-                    unum = va_arg(ap,unsigned long long);
+                    unum = va_arg(ap, PORT_ULONGLONG);
                 {
                     char buf[HI_SDS_LLSTR_SIZE];
                     l = hi_sdsull2str(buf,unum);
@@ -886,7 +886,7 @@ hisds hi_sdscatrepr(hisds s, const char *p, size_t len) {
         case '\a': s = hi_sdscatlen(s,"\\a",2); break;
         case '\b': s = hi_sdscatlen(s,"\\b",2); break;
         default:
-            if (isprint(*p))
+            if (isprint((unsigned char)*p)) WIN_PORT_FIX /* pass as unsigned char */
                 s = hi_sdscatprintf(s,"%c",*p);
             else
                 s = hi_sdscatprintf(s,"\\x%02x",(unsigned char)*p);

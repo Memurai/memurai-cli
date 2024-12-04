@@ -30,6 +30,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,7 +68,7 @@ static inline char sdsReqType(size_t string_size) {
         return SDS_TYPE_8;
     if (string_size < 1<<16)
         return SDS_TYPE_16;
-#if (LONG_MAX == LLONG_MAX)
+#if (PORT_LONG_MAX == LLONG_MAX)
     if (string_size < 1ll<<32)
         return SDS_TYPE_32;
     return SDS_TYPE_64;
@@ -81,7 +84,7 @@ static inline size_t sdsTypeMaxSize(char type) {
         return (1<<8) - 1;
     if (type == SDS_TYPE_16)
         return (1<<16) - 1;
-#if (LONG_MAX == LLONG_MAX)
+#if (PORT_LONG_MAX == LLONG_MAX)
     if (type == SDS_TYPE_32)
         return (1ll<<32) - 1;
 #endif
@@ -128,27 +131,27 @@ sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
         usable = sdsTypeMaxSize(type);
     switch(type) {
         case SDS_TYPE_5: {
-            *fp = type | (initlen << SDS_TYPE_BITS);
+            *fp = type | (unsigned char)(initlen << SDS_TYPE_BITS);             WIN_PORT_FIX /* cast (unsigned char) */
             break;
         }
         case SDS_TYPE_8: {
             SDS_HDR_VAR(8,s);
-            sh->len = initlen;
-            sh->alloc = usable;
+            sh->len = (uint8_t)initlen;                                         WIN_PORT_FIX /* cast (uint8_t) */
+            sh->alloc = (uint8_t)usable;                                        WIN_PORT_FIX /* cast (uint8_t) */
             *fp = type;
             break;
         }
         case SDS_TYPE_16: {
             SDS_HDR_VAR(16,s);
-            sh->len = initlen;
-            sh->alloc = usable;
+            sh->len = (uint16_t)initlen;                                        WIN_PORT_FIX /* cast (uint16_t) */
+            sh->alloc = (uint16_t)usable;                                       WIN_PORT_FIX /* cast (uint16_t) */
             *fp = type;
             break;
         }
         case SDS_TYPE_32: {
             SDS_HDR_VAR(32,s);
-            sh->len = initlen;
-            sh->alloc = usable;
+            sh->len = (uint32_t)initlen;                                        WIN_PORT_FIX /* cast (uint32_t) */
+            sh->alloc = (uint32_t)usable;                                       WIN_PORT_FIX /* cast (uint32_t) */
             *fp = type;
             break;
         }
@@ -533,7 +536,7 @@ sds sdscpy(sds s, const char *t) {
  *
  * sdscatprintf(sdsempty(),"%lld\n", value);
  */
-sds sdsfromlonglong(long long value) {
+sds sdsfromlonglong(PORT_LONGLONG value) {
     char buf[LONG_STR_SIZE];
     int len = ll2string(buf,sizeof(buf),value);
 
@@ -618,15 +621,15 @@ sds sdscatprintf(sds s, const char *fmt, ...) {
  * %s - C String
  * %S - SDS string
  * %i - signed int
- * %I - 64 bit signed integer (long long, int64_t)
+ * %I - 64 bit signed integer (PORT_LONGLONG, int64_t)
  * %u - unsigned int
- * %U - 64 bit unsigned integer (unsigned long long, uint64_t)
+ * %U - 64 bit unsigned integer (PORT_ULONGLONG, uint64_t)
  * %% - Verbatim "%" character.
  */
 sds sdscatfmt(sds s, char const *fmt, ...) {
     size_t initlen = sdslen(s);
     const char *f = fmt;
-    long i;
+    PORT_LONG i;
     va_list ap;
 
     /* To avoid continuous reallocations, let's start with a buffer that
@@ -635,12 +638,12 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
     s = sdsMakeRoomFor(s, strlen(fmt)*2);
     va_start(ap,fmt);
     f = fmt;    /* Next format specifier byte to process. */
-    i = initlen; /* Position of the next byte to write to dest str. */
+    i = (PORT_LONG)initlen; /* Position of the next byte to write to dest str. */       WIN_PORT_FIX /* cast (PORT_LONG) */
     while(*f) {
         char next, *str;
         size_t l;
-        long long num;
-        unsigned long long unum;
+        PORT_LONGLONG num;
+        PORT_ULONGLONG unum;
 
         /* Make sure there is always space for at least 1 char. */
         if (sdsavail(s)==0) {
@@ -669,7 +672,7 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
                 if (next == 'i')
                     num = va_arg(ap,int);
                 else
-                    num = va_arg(ap,long long);
+                    num = va_arg(ap,PORT_LONGLONG);
                 {
                     char buf[LONG_STR_SIZE];
                     l = ll2string(buf,sizeof(buf),num);
@@ -686,7 +689,7 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
                 if (next == 'u')
                     unum = va_arg(ap,unsigned int);
                 else
-                    unum = va_arg(ap,unsigned long long);
+                    unum = va_arg(ap,PORT_ULONGLONG);
                 {
                     char buf[LONG_STR_SIZE];
                     l = ull2string(buf,sizeof(buf),unum);
@@ -849,7 +852,7 @@ int sdscmp(const sds s1, const sds s2) {
  */
 sds *sdssplitlen(const char *s, ssize_t len, const char *sep, int seplen, int *count) {
     int elements = 0, slots = 5;
-    long start = 0, j;
+    PORT_LONG start = 0, j;
     sds *tokens;
 
     if (seplen < 1 || len <= 0) {
@@ -986,6 +989,26 @@ int hex_digit_to_int(char c) {
     }
 }
 
+#ifdef XPLAT_FIX
+__forceinline sds __sdscatlen_ex(sds current, const char *t, size_t len, char *static_buffer, int *ppos, int static_buffer_size) {
+    if (current) {
+        return sdscatlen(current, t, len);
+    }
+    else {
+        if (*ppos + len > static_buffer_size) {
+            current = sdsnewlen(static_buffer, *ppos);
+            return sdscatlen(current, t, len);
+        }
+        else {
+            for (int i = 0; i < len; i++) {
+                static_buffer[(*ppos)++] = t[i];
+            }
+            return NULL;
+        }
+    }
+}
+#endif
+
 /* Split a line into arguments, where every argument can be in the
  * following programming-language REPL-alike form:
  *
@@ -1006,6 +1029,14 @@ int hex_digit_to_int(char c) {
  * as in: "foo"bar or "foo'
  */
 sds *sdssplitargs(const char *line, int *argc) {
+#ifdef XPLAT_FIX
+    // All the XPLAT_FIX changes in this function are to improve the otherwise poor performance in
+    // the PING benchmarks on Windows. We should consider removing them once we are able to find a
+    // better solution for that problem.
+    char __static_buffer[64];
+    int __pos;
+#define sdscatlen(a,b,c) __sdscatlen_ex(a,b,c, __static_buffer, &__pos, sizeof(__static_buffer))
+#endif
     const char *p = line;
     char *current = NULL;
     char **vector = NULL;
@@ -1020,7 +1051,11 @@ sds *sdssplitargs(const char *line, int *argc) {
             int insq=0; /* set to 1 if we are in 'single quotes' */
             int done=0;
 
+#ifdef XPLAT_FIX
+            if (current == NULL) __pos = 0;
+#else
             if (current == NULL) current = sdsempty();
+#endif
             while(!done) {
                 if (inq) {
                     if (*p == '\\' && *(p+1) == 'x' &&
@@ -1096,6 +1131,10 @@ sds *sdssplitargs(const char *line, int *argc) {
             }
             /* add the token to the vector */
             vector = s_realloc(vector,((*argc)+1)*sizeof(char*));
+#ifdef XPLAT_FIX
+            if(!current) current = sdsnewlen(__static_buffer, __pos);
+#undef sdscatlen
+#endif
             vector[*argc] = current;
             (*argc)++;
             current = NULL;

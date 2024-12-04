@@ -49,7 +49,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _WIN32
 #include <pthread.h>
+#endif
 #include "config.h"
 
 #ifndef __ATOMIC_VAR_H
@@ -82,7 +84,7 @@
 #endif
 
 #if !defined(__ATOMIC_VAR_FORCE_SYNC_MACROS) && defined(__STDC_VERSION__) && \
-    (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__)
+    (__STDC_VERSION__ >= 201112L) && (!defined(__STDC_NO_ATOMICS__) || (_MSC_VER >= 1935)) // WIN_PORT_FIX: MSVC v19.35 provides a basic c11 atomics implementation but still defines __STDC_NO_ATOMICS__
 /* Use '_Atomic' keyword if the compiler supports. */
 #undef  redisAtomic
 #define redisAtomic _Atomic

@@ -36,6 +36,8 @@
 #ifndef __DICT_H
 #define __DICT_H
 
+#include "Win32_Interop/win32_types_hiredis.h"
+
 #include "mt19937-64.h"
 #include <limits.h>
 #include <stdint.h>
@@ -78,16 +80,16 @@ typedef struct dictType {
     void (*afterReplaceEntry)(dict *d, dictEntry *entry);
 } dictType;
 
-#define DICTHT_SIZE(exp) ((exp) == -1 ? 0 : (unsigned long)1<<(exp))
+#define DICTHT_SIZE(exp) ((exp) == -1 ? 0 : (PORT_ULONG)1<<(exp))
 #define DICTHT_SIZE_MASK(exp) ((exp) == -1 ? 0 : (DICTHT_SIZE(exp))-1)
 
 struct dict {
     dictType *type;
 
     dictEntry **ht_table[2];
-    unsigned long ht_used[2];
+    PORT_ULONG ht_used[2];
 
-    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    PORT_LONG rehashidx; /* rehashing not in progress if rehashidx == -1 */
 
     /* Keep small vars at end for optimal (minimal) struct padding */
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
@@ -104,11 +106,11 @@ struct dict {
  * should be called while iterating. */
 typedef struct dictIterator {
     dict *d;
-    long index;
+    PORT_LONG index;
     int table, safe;
     dictEntry *entry, *nextEntry;
     /* unsafe iterator fingerprint for misuse detection. */
-    unsigned long long fingerprint;
+    PORT_ULONGLONG fingerprint;
 } dictIterator;
 
 typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
@@ -151,8 +153,8 @@ typedef struct {
 #define dictResumeRehashing(d) ((d)->pauserehash--)
 
 /* If our unsigned long type can store a 64 bit number, use a 64 bit PRNG. */
-#if ULONG_MAX >= 0xffffffffffffffff
-#define randomULong() ((unsigned long) genrand64_int64())
+#if PORT_ULONG_MAX >= 0xffffffffffffffff
+#define randomULong() ((PORT_ULONG) genrand64_int64())
 #else
 #define randomULong() random()
 #endif
@@ -165,8 +167,8 @@ typedef enum {
 
 /* API */
 dict *dictCreate(dictType *type);
-int dictExpand(dict *d, unsigned long size);
-int dictTryExpand(dict *d, unsigned long size);
+int dictExpand(dict *d, PORT_ULONG size);
+int dictTryExpand(dict *d, PORT_ULONG size);
 void *dictMetadata(dict *d);
 int dictAdd(dict *d, void *key, void *val);
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
@@ -219,8 +221,8 @@ int dictRehash(dict *d, int n);
 int dictRehashMilliseconds(dict *d, int ms);
 void dictSetHashFunctionSeed(uint8_t *seed);
 uint8_t *dictGetHashFunctionSeed(void);
-unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, void *privdata);
-unsigned long dictScanDefrag(dict *d, unsigned long v, dictScanFunction *fn, dictDefragFunctions *defragfns, void *privdata);
+PORT_ULONG dictScan(dict *d, PORT_ULONG v, dictScanFunction *fn, void *privdata);
+PORT_ULONG dictScanDefrag(dict *d, PORT_ULONG v, dictScanFunction *fn, dictDefragFunctions *defragfns, void *privdata);
 uint64_t dictGetHash(dict *d, const void *key);
 dictEntry *dictFindEntryByPtrAndHash(dict *d, const void *oldptr, uint64_t hash);
 

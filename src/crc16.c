@@ -1,4 +1,4 @@
-#include "server.h"
+#include <inttypes.h>
 
 /*
  * Copyright 2001-2010 Georges Menie (www.menie.org)

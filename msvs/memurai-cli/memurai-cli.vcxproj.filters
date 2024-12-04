@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\..\deps\linenoise\linenoise.c" />
+    <ClCompile Include="..\..\src\adlist.c" />
+    <ClCompile Include="..\..\src\ae.c" />
+    <ClCompile Include="..\..\src\anet.c" />
+    <ClCompile Include="..\..\src\cli_commands.c" />
+    <ClCompile Include="..\..\src\cli_common.c" />
+    <ClCompile Include="..\..\src\crc16.c" />
+    <ClCompile Include="..\..\src\crc64.c" />
+    <ClCompile Include="..\..\src\crcspeed.c" />
+    <ClCompile Include="..\..\src\dict.c" />
+    <ClCompile Include="..\..\src\monotonic.c" />
+    <ClCompile Include="..\..\src\mt19937-64.c" />
+    <ClCompile Include="..\..\src\valkey-cli.c" />
+    <ClCompile Include="..\..\src\redisassert.c" />
+    <ClCompile Include="..\..\src\release.c" />
+    <ClCompile Include="..\..\src\sds.c" />
+    <ClCompile Include="..\..\src\sha256.c" />
+    <ClCompile Include="..\..\src\siphash.c" />
+    <ClCompile Include="..\..\src\strl.c" />
+    <ClCompile Include="..\..\src\util.c" />
+    <ClCompile Include="..\..\src\zmalloc.c" />
+      <Filter>WindowsServer</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\deps\linenoise\linenoise.h" />
+    <ClInclude Include="..\..\src\cli_commands.h" />
+    <ClInclude Include="..\..\src\dict.h" />
+    <ClInclude Include="..\..\src\help.h" />
+    <ClInclude Include="..\..\src\monotonic.h" />
+    <ClInclude Include="resource.h" />
+      <Filter>WindowsServer</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="memurai-cli.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="WindowsServer">
+      <UniqueIdentifier>{834cb401-5118-4027-bb91-942788824fba}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

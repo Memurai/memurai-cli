@@ -27,6 +27,27 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
+#ifdef _WIN32
+#define UMDF_USING_NTSTATUS
+#include <winsock2.h>
+#include <ntstatus.h>     // for STATUS_SUCCESS
+#include <process.h>    // for getpid
+#include <shlwapi.h>    // for PathIsRelative
+#include <bcrypt.h>
+#include <direct.h>
+
+#include "Win32_Interop/Win32_APIs.h"
+#include "Win32_Interop/Win32_Time.h"
+
+#pragma comment (lib, "Shlwapi.lib")
+
+#define S_ISDIR(mode) (((mode) & _S_IFMT) == _S_IFDIR)
+#define S_ISREG(mode) (((mode) & _S_IFMT) == _S_IFREG)
+#endif // _WIN32
+
 #include "fmacros.h"
 #include "fpconv_dtoa.h"
 #include <stdlib.h>
@@ -34,17 +55,24 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <assert.h>
 #include <math.h>
+#ifndef _WIN32
 #include <unistd.h>
 #include <sys/time.h>
+#endif
 #include <float.h>
 #include <stdint.h>
 #include <errno.h>
 #include <time.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <dirent.h>
+#endif
 #include <fcntl.h>
+#ifndef _WIN32
 #include <libgen.h>
+#endif
 
 #include "util.h"
 #include "sha256.h"
@@ -223,11 +251,11 @@ int stringmatchlen_fuzz_test(void) {
  * On parsing error, if *err is not NULL, it's set to 1, otherwise it's
  * set to 0. On error the function return value is 0, regardless of the
  * fact 'err' is NULL or not. */
-unsigned long long memtoull(const char *p, int *err) {
+PORT_ULONGLONG memtoull(const char *p, int *err) {
     const char *u;
     char buf[128];
-    long mul; /* unit multiplier */
-    unsigned long long val;
+    PORT_LONG mul; /* unit multiplier */
+    PORT_ULONGLONG val;
     unsigned int digits;
 
     if (err) *err = 0;
@@ -260,7 +288,7 @@ unsigned long long memtoull(const char *p, int *err) {
 
     /* Copy the digits into a buffer, we'll use strtoll() to convert
      * the digit (without the unit) into a number. */
-    digits = u-p;
+    digits = (unsigned int)(u-p);                                                WIN_PORT_FIX /* cast (unsigned int) */
     if (digits >= sizeof(buf)) {
         if (err) *err = 1;
         return 0;
@@ -342,8 +370,8 @@ uint32_t sdigits10(int64_t v) {
 /* Convert a long long into a string. Returns the number of
  * characters needed to represent the number.
  * If the buffer is not big enough to store the string, 0 is returned. */
-int ll2string(char *dst, size_t dstlen, long long svalue) {
-    unsigned long long value;
+int ll2string(char *dst, size_t dstlen, PORT_LONGLONG svalue) {
+    PORT_ULONGLONG value;
     int negative = 0;
 
     /* The ull2string function with 64bit unsigned integers for simplicity, so
@@ -352,7 +380,7 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
         if (svalue != LLONG_MIN) {
             value = -svalue;
         } else {
-            value = ((unsigned long long) LLONG_MAX)+1;
+            value = ((PORT_ULONGLONG) LLONG_MAX)+1;
         }
         if (dstlen < 2)
             goto err;
@@ -384,7 +412,7 @@ err:
  * novel approach but only publicizes an already used technique):
  *
  * https://www.facebook.com/notes/facebook-engineering/three-optimization-tips-for-c/10151361643253920 */
-int ull2string(char *dst, size_t dstlen, unsigned long long value) {
+int ull2string(char *dst, size_t dstlen, PORT_ULONGLONG value) {
     static const char digits[201] =
         "0001020304050607080910111213141516171819"
         "2021222324252627282930313233343536373839"
@@ -435,11 +463,11 @@ err:
  * Because of its strictness, it is safe to use this function to check if
  * you can convert a string into a long long, and obtain back the string
  * from the number without any loss in the string representation. */
-int string2ll(const char *s, size_t slen, long long *value) {
+int string2ll(const char *s, size_t slen, PORT_LONGLONG *value) {
     const char *p = s;
     size_t plen = 0;
     int negative = 0;
-    unsigned long long v;
+    PORT_ULONGLONG v;
 
     /* A string of zero length or excessive length is not a valid number. */
     if (plen == slen || slen >= LONG_STR_SIZE)
@@ -490,7 +518,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
     /* Convert to negative if needed, and do the final overflow check when
      * converting from unsigned long long to long long. */
     if (negative) {
-        if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
+        if (v > ((PORT_ULONGLONG)(-(LLONG_MIN+1))+1)) /* Overflow. */
             return 0;
         if (value != NULL) *value = -v;
     } else {
@@ -506,8 +534,8 @@ int string2ll(const char *s, size_t slen, long long *value) {
  * Redis: if it fails, strtoull() is used instead. The function returns
  * 1 if the conversion happened successfully or 0 if the number is
  * invalid or out of range. */
-int string2ull(const char *s, unsigned long long *value) {
-    long long ll;
+int string2ull(const char *s, PORT_ULONGLONG *value) {
+    PORT_LONGLONG ll;
     if (string2ll(s,strlen(s),&ll)) {
         if (ll < 0) return 0; /* Negative values are out of range. */
         *value = ll;
@@ -524,16 +552,16 @@ int string2ull(const char *s, unsigned long long *value) {
 /* Convert a string into a long. Returns 1 if the string could be parsed into a
  * (non-overflowing) long, 0 otherwise. The value will be set to the parsed
  * value when appropriate. */
-int string2l(const char *s, size_t slen, long *lval) {
-    long long llval;
+int string2l(const char *s, size_t slen, PORT_LONG *lval) {
+    PORT_LONGLONG llval;
 
     if (!string2ll(s,slen,&llval))
         return 0;
 
-    if (llval < LONG_MIN || llval > LONG_MAX)
+    if (llval < PORT_LONG_MIN || llval > PORT_LONG_MAX)
         return 0;
 
-    *lval = (long)llval;
+    *lval = (PORT_LONG)llval;
     return 1;
 }
 
@@ -544,9 +572,9 @@ int string2l(const char *s, size_t slen, long *lval) {
  * Note that this function demands that the string strictly represents
  * a double: no spaces or other characters before or after the string
  * representing the number are accepted. */
-int string2ld(const char *s, size_t slen, long double *dp) {
+int string2ld(const char *s, size_t slen, PORT_LONGDOUBLE *dp) {
     char buf[MAX_LONG_DOUBLE_CHARS];
-    long double value;
+    PORT_LONGDOUBLE value;
     char *eptr;
 
     if (slen == 0 || slen >= sizeof(buf)) return 0;
@@ -590,7 +618,7 @@ int string2d(const char *s, size_t slen, double *dp) {
 
 /* Returns 1 if the double value can safely be represented in long long without
  * precision loss, in which case the corresponding long long is stored in the out variable. */
-int double2ll(double d, long long *out) {
+int double2ll(double d, PORT_LONGLONG *out) {
 #if (DBL_MANT_DIG >= 52) && (DBL_MANT_DIG <= 63) && (LLONG_MAX == 0x7fffffffffffffffLL)
     /* Check if the float is in a safe range to be casted into a
      * long long. We are assuming that long long is 64 bit here.
@@ -609,7 +637,7 @@ int double2ll(double d, long long *out) {
      * we only care about the first part here. */
     if (d < (double)(-LLONG_MAX/2) || d > (double)(LLONG_MAX/2))
         return 0;
-    long long ll = d;
+    PORT_LONGLONG ll = d;
     if (ll == d) {
         *out = ll;
         return 1;
@@ -643,7 +671,7 @@ int d2string(char *buf, size_t len, double value) {
         else
             len = snprintf(buf,len,"0");
     } else {
-        long long lvalue;
+        PORT_LONGLONG lvalue;
         /* Integer printing function is much faster, check if we can safely use it. */
         if (double2ll(value, &lvalue))
             len = ll2string(buf,len,lvalue);
@@ -694,15 +722,15 @@ int fixedpoint_d2string(char *dst, size_t dstlen, double dvalue, int fractional_
     10000000.0, 100000000.0, 1000000000.0, 10000000000.0, 100000000000.0, 1000000000000.0,
     10000000000000.0, 100000000000000.0, 1000000000000000.0, 10000000000000000.0,
     100000000000000000.0 };
-    long long svalue = llrint(dvalue * powers_of_ten[fractional_digits]);
-    unsigned long long value;
+    PORT_LONGLONG svalue = llrint(dvalue * powers_of_ten[fractional_digits]);
+    PORT_ULONGLONG value;
     /* write sign */
     int negative = 0;
     if (svalue < 0) {
         if (svalue != LLONG_MIN) {
             value = -svalue;
         } else {
-            value = ((unsigned long long) LLONG_MAX)+1;
+            value = ((PORT_ULONGLONG) LLONG_MAX)+1;
         }
         if (dstlen < 2)
             goto err;
@@ -790,7 +818,7 @@ int trimDoubleString(char *buf, size_t len) {
  *
  * The function returns the length of the string or zero if there was not
  * enough buffer room to store it. */
-int ld2string(char *buf, size_t len, long double value, ld2string_mode mode) {
+int ld2string(char *buf, size_t len, PORT_LONGDOUBLE value, ld2string_mode mode) {
     size_t l = 0;
 
     if (isinf(value)) {
@@ -871,6 +899,52 @@ void getRandomBytes(unsigned char *p, size_t len) {
          * the same seed with a progressive counter. For the goals of this
          * function we just need non-colliding strings, there are no
          * cryptographic security needs. */
+#ifdef _WIN32
+        assert(sizeof(seed)%16 == 0); // The following code section assumes this is true
+        if (STATUS_SUCCESS != BCryptGenRandom(NULL, seed, sizeof(seed), BCRYPT_USE_SYSTEM_PREFERRED_RNG)) {
+            /* fallback on using timestamps, pid and GUID, if possible, as a seed */
+            struct timeval tv;
+            gettimeofday(&tv, NULL);
+            for(int i = 0; i < sizeof(seed); i += 4) {
+                *(__int32*)(&seed[i]) = (i % 8 == 0 ? tv.tv_usec : tv.tv_sec);
+            }
+
+            pid_t pid = getpid();
+            for (int i = 0; i < sizeof(seed); i += 2) {
+                *(__int16*)(&seed[i]) ^= pid;
+            }
+
+            FILETIME ftIdle;
+            FILETIME ftKernel;
+            FILETIME ftUser;
+            if (0 != GetSystemTimes(&ftIdle, &ftKernel, &ftUser)) {
+                int highValues[] = {ftIdle.dwHighDateTime, ftKernel.dwHighDateTime, ftUser.dwHighDateTime};
+                int lowValues[] = {ftIdle.dwLowDateTime, ftKernel.dwLowDateTime, ftUser.dwLowDateTime};
+                // Do some permutations in what we're xoring, using a distinct high and low pair for each point.
+                for(int i = 0; i < sizeof(seed); i += 4) {
+                    int highIndex = (i/12)%3;
+                    int lowIndex = (i/4)%3;
+                    *(__int32*)(&seed[i]) ^= highValues[highIndex]^lowValues[lowIndex];
+                }
+            }
+
+            for(int i = 0; i < sizeof(seed); i+=16) {
+                GUID gid;
+                if (S_OK == CoCreateGuid(&gid)) {
+                    // Use the internals of the GUID to increase seed randomization.
+                    *(__int32*)(&seed[i]) ^= gid.Data1;
+                    *(__int16*)(&seed[i+4]) ^= gid.Data2;
+                    *(__int16*)(&seed[i+6]) ^= gid.Data3;
+                    for (int j = i+8; j < i+16; j++) {
+                        seed[j] ^= gid.Data4[j - i - 8];
+                    }
+                    seed_initialized = 1; // If a GUID was used, seed should be sufficiently unique.
+                }
+            }
+        } else {
+            seed_initialized = 1;
+        }
+#else
         FILE *fp = fopen("/dev/urandom","r");
         if (fp == NULL || fread(seed,sizeof(seed),1,fp) != 1) {
             /* Revert to a weaker seed, and in this case reseed again
@@ -879,12 +953,13 @@ void getRandomBytes(unsigned char *p, size_t len) {
                 struct timeval tv;
                 gettimeofday(&tv,NULL);
                 pid_t pid = getpid();
-                seed[j] = tv.tv_sec ^ tv.tv_usec ^ pid ^ (long)fp;
+                seed[j] = tv.tv_sec ^ tv.tv_usec ^ pid ^ (PORT_LONG)fp;
             }
         } else {
             seed_initialized = 1;
         }
         if (fp) fclose(fp);
+#endif
     }
 
     while(len) {
@@ -936,6 +1011,7 @@ void getRandomHexChars(char *p, size_t len) {
     for (j = 0; j < len; j++) p[j] = charset[p[j] & 0x0F];
 }
 
+#ifdef REMOVED_SERVER_CODE
 /* Given the filename, return the absolute path as an SDS string, or NULL
  * if it fails for some reason. Note that "filename" may be an absolute path
  * already, this will be detected and handled correctly.
@@ -987,12 +1063,13 @@ sds getAbsolutePath(char *filename) {
     sdsfree(relpath);
     return abspath;
 }
+#endif // REMOVED_SERVER_CODE
 
 /*
  * Gets the proper timezone in a more portable fashion
  * i.e timezone variables are linux specific.
  */
-long getTimeZone(void) {
+PORT_LONG getTimeZone(void) {
 #if defined(__linux__) || defined(__sun)
     return timezone;
 #else
@@ -1001,7 +1078,7 @@ long getTimeZone(void) {
 
     gettimeofday(&tv, &tz);
 
-    return tz.tz_minuteswest * 60L;
+    return tz.tz_minuteswest * (PORT_LONG)60;
 #endif
 }
 
@@ -1024,7 +1101,11 @@ int dirExists(char *dname) {
 }
 
 int dirCreateIfMissing(char *dname) {
+#ifdef _WIN32
+    if (_mkdir(dname) != 0) {
+#else
     if (mkdir(dname, 0755) != 0) {
+#endif
         if (errno != EEXIST) {
             return -1;
         } else if (!dirExists(dname)) {
@@ -1035,6 +1116,9 @@ int dirCreateIfMissing(char *dname) {
     return 0;
 }
 
+#ifndef _WIN32
+/* DIR doesn't exist in Windows and should be used by adding third party implementation.
+   Since this function is not called from anywhere, third party is not used for now. */
 int dirRemove(char *dname) {
     DIR *dir;
     struct stat stat_entry;
@@ -1084,11 +1168,13 @@ int dirRemove(char *dname) {
     closedir(dir);
     return 0;
 }
+#endif
 
 sds makePath(char *path, char *filename) {
     return sdscatfmt(sdsempty(), "%s/%s", path, filename);
 }
 
+#ifdef REMOVED_SERVER_CODE
 /* Given the filename, sync the corresponding directory.
  *
  * Usually a portable and safe pattern to overwrite existing files would be like:
@@ -1136,6 +1222,7 @@ int fsyncFileDir(const char *filename) {
     close(dir_fd);
     return 0;
 }
+#endif // REMOVED_SERVER_CODE
 
  /* free OS pages backed by file */
 int reclaimFilePageCache(int fd, size_t offset, size_t length) {
@@ -1161,7 +1248,7 @@ int reclaimFilePageCache(int fd, size_t offset, size_t length) {
 
 static void test_string2ll(void) {
     char buf[32];
-    long long v;
+    PORT_LONGLONG v;
 
     /* May not start with +. */
     redis_strlcpy(buf,"+1",sizeof(buf));
@@ -1216,7 +1303,7 @@ static void test_string2ll(void) {
 
 static void test_string2l(void) {
     char buf[32];
-    long v;
+    PORT_LONG v;
 
     /* May not start with +. */
     redis_strlcpy(buf,"+1",sizeof(buf));
@@ -1246,17 +1333,17 @@ static void test_string2l(void) {
     assert(string2l(buf,strlen(buf),&v) == 1);
     assert(v == -99);
 
-#if LONG_MAX != LLONG_MAX
+#if PORT_LONG_MAX != LLONG_MAX
     redis_strlcpy(buf,"-2147483648",sizeof(buf));
     assert(string2l(buf,strlen(buf),&v) == 1);
-    assert(v == LONG_MIN);
+    assert(v == PORT_LONG_MIN);
 
     redis_strlcpy(buf,"-2147483649",sizeof(buf)); /* overflow */
     assert(string2l(buf,strlen(buf),&v) == 0);
 
     redis_strlcpy(buf,"2147483647",sizeof(buf));
     assert(string2l(buf,strlen(buf),&v) == 1);
-    assert(v == LONG_MAX);
+    assert(v == PORT_LONG_MAX);
 
     redis_strlcpy(buf,"2147483648",sizeof(buf)); /* overflow */
     assert(string2l(buf,strlen(buf),&v) == 0);
@@ -1265,7 +1352,7 @@ static void test_string2l(void) {
 
 static void test_ll2string(void) {
     char buf[32];
-    long long v;
+    PORT_LONGLONG v;
     int sz;
 
     v = 0;
@@ -1306,7 +1393,7 @@ static void test_ll2string(void) {
 
 static void test_ld2string(void) {
     char buf[32];
-    long double v;
+    PORT_LONGDOUBLE v;
     int sz;
 
     v = 0.0 / 0.0;

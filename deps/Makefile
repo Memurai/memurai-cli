@@ -40,7 +40,6 @@ distclean:
 	-(cd linenoise && $(MAKE) clean) > /dev/null || true
 	-(cd lua && $(MAKE) clean) > /dev/null || true
 	-(cd jemalloc && [ -f Makefile ] && $(MAKE) distclean) > /dev/null || true
-	-(cd hdr_histogram && $(MAKE) clean) > /dev/null || true
 	-(cd fpconv && $(MAKE) clean) > /dev/null || true
 	-(rm -f .make-*)
 
@@ -61,12 +60,6 @@ linenoise: .make-prerequisites
 	cd linenoise && $(MAKE)
 
 .PHONY: linenoise
-
-hdr_histogram: .make-prerequisites
-	@printf '%b %b\n' $(MAKECOLOR)MAKE$(ENDCOLOR) $(BINCOLOR)$@$(ENDCOLOR)
-	cd hdr_histogram && $(MAKE)
-
-.PHONY: hdr_histogram
 
 fpconv: .make-prerequisites
 	@printf '%b %b\n' $(MAKECOLOR)MAKE$(ENDCOLOR) $(BINCOLOR)$@$(ENDCOLOR)

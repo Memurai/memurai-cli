@@ -28,9 +28,20 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
+#ifdef _WIN32
+#include "Win32_Interop/Win32_FDAPI.h"
+#include "Win32_Interop/Win32_Error.h"
+#define ANET_NOTUSED(V) V
+#include <Mstcpip.h>
+#endif
+
 #include "fmacros.h"
 
 #include <sys/types.h>
+#ifndef _WIN32
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -39,9 +50,10 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <netdb.h>
+#endif
 #include <fcntl.h>
 #include <string.h>
-#include <netdb.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -51,6 +63,10 @@
 #include "util.h"
 
 #define UNUSED(x) (void)(x)
+
+#ifdef _WIN32
+#define S_ISFIFO(mode) (((mode) & _S_IFMT) == _S_IFIFO)
+#endif
 
 static void anetSetError(char *err, const char *fmt, ...)
 {
@@ -77,15 +93,20 @@ int anetSetBlock(char *err, int fd, int non_block) {
     /* Set the socket blocking (if non_block is zero) or non-blocking.
      * Note that fcntl(2) for F_GETFL and F_SETFL can't be
      * interrupted by a signal. */
-    if ((flags = fcntl(fd, F_GETFL)) == -1) {
+    if ((flags = fcntl(fd, F_GETFL, 0)) == -1) {                                WIN_PORT_FIX /* fcntl default value for the 'flags' parameter */
         anetSetError(err, "fcntl(F_GETFL): %s", strerror(errno));
         return ANET_ERR;
     }
 
-    /* Check if this flag has been set or unset, if so, 
+    /* Check if this flag has been set or unset, if so,
      * then there is no need to call fcntl to set/unset it again. */
+
+    // Disable this optimization on Windows for now as it fails
+    // to set the socket to blocking mode
+#ifndef _WIN32
     if (!!(flags & O_NONBLOCK) == !!non_block)
         return ANET_OK;
+#endif
 
     if (non_block)
         flags |= O_NONBLOCK;
@@ -107,10 +128,14 @@ int anetBlock(char *err, int fd) {
     return anetSetBlock(err,fd,0);
 }
 
-/* Enable the FD_CLOEXEC on the given fd to avoid fd leaks. 
- * This function should be invoked for fd's on specific places 
+/* Enable the FD_CLOEXEC on the given fd to avoid fd leaks.
+ * This function should be invoked for fd's on specific places
  * where fork + execve system calls are called. */
 int anetCloexec(int fd) {
+#ifdef _WIN32
+    // Doesn't apply on Windows
+    return 0;
+#else
     int r;
     int flags;
 
@@ -128,6 +153,7 @@ int anetCloexec(int fd) {
     } while (r == -1 && errno == EINTR);
 
     return r;
+#endif // _WIN32
 }
 
 /* Set TCP keep alive option to detect dead peers. The interval option
@@ -143,7 +169,28 @@ int anetKeepAlive(char *err, int fd, int interval)
         return ANET_ERR;
     }
 
-#ifdef __linux__
+#if defined(_WIN32)
+    struct tcp_keepalive alive;
+    DWORD dwBytesRet = 0;
+    alive.onoff = TRUE;
+    alive.keepalivetime = interval * 1000;
+    /* According to
+     * http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551(v=vs.85).aspx
+     * On Windows Vista and later, the number of keep-alive probes (data
+     * retransmissions) is set to 10 and cannot be changed.
+     * So we set the keep alive interval as interval/10, as 10 probes will
+     * be send before detecting an error */
+    val = interval/10;
+    if (val == 0) val = 1;
+    alive.keepaliveinterval = val*1000;
+    if (FDAPI_WSAIoctl(fd, SIO_KEEPALIVE_VALS, &alive, sizeof(alive),
+                       NULL, 0, &dwBytesRet, NULL, NULL) == SOCKET_ERROR) {
+        anetSetError(err,
+                     "WSAIotcl(SIO_KEEPALIVE_VALS) failed with error code %d\n",
+                     strerror(errno));
+        return ANET_ERR;
+    }
+#elif defined(__linux__)
     /* Default settings are more or less garbage, with the keepalive time
      * set to 7200 by default on Linux. Modify settings to make the feature
      * actually useful. */
@@ -208,11 +255,15 @@ int anetDisableTcpNoDelay(char *err, int fd)
 
 /* Set the socket send timeout (SO_SNDTIMEO socket option) to the specified
  * number of milliseconds, or disable it if the 'ms' argument is zero. */
-int anetSendTimeout(char *err, int fd, long long ms) {
+int anetSendTimeout(char *err, int fd, PORT_LONGLONG ms) {
+#ifdef _WIN32
+    DWORD tv = ms;
+#else
     struct timeval tv;
 
     tv.tv_sec = ms/1000;
     tv.tv_usec = (ms%1000)*1000;
+#endif
     if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == -1) {
         anetSetError(err, "setsockopt SO_SNDTIMEO: %s", strerror(errno));
         return ANET_ERR;
@@ -222,11 +273,15 @@ int anetSendTimeout(char *err, int fd, long long ms) {
 
 /* Set the socket receive timeout (SO_RCVTIMEO socket option) to the specified
  * number of milliseconds, or disable it if the 'ms' argument is zero. */
-int anetRecvTimeout(char *err, int fd, long long ms) {
+int anetRecvTimeout(char *err, int fd, PORT_LONGLONG ms) {
+#ifdef _WIN32
+    DWORD tv = ms;
+#else
     struct timeval tv;
 
     tv.tv_sec = ms/1000;
     tv.tv_usec = (ms%1000)*1000;
+#endif
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
         anetSetError(err, "setsockopt SO_RCVTIMEO: %s", strerror(errno));
         return ANET_ERR;
@@ -267,6 +322,7 @@ int anetResolve(char *err, char *host, char *ipbuf, size_t ipbuf_len,
     return ANET_OK;
 }
 
+#ifdef REMOVED_SERVER_CODE
 static int anetSetReuseAddr(char *err, int fd) {
     int yes = 1;
     /* Make sure connection-intensive things like the redis benchmark
@@ -280,7 +336,7 @@ static int anetSetReuseAddr(char *err, int fd) {
 
 static int anetCreateSocket(char *err, int domain) {
     int s;
-    if ((s = socket(domain, SOCK_STREAM, 0)) == -1) {
+    if ((s = socket(domain, SOCK_STREAM, IF_WIN32(IPPROTO_TCP,0))) == -1) {
         anetSetError(err, "creating socket: %s", strerror(errno));
         return ANET_ERR;
     }
@@ -443,7 +499,23 @@ static int anetV6Only(char *err, int s) {
     }
     return ANET_OK;
 }
+#endif // REMOVED_SERVER_CODE
 
+#ifdef _WIN32
+static int anetSetExclusiveAddr(char *err, int fd)
+{
+    int yes = 1;
+    /* Make sure connection-intensive things like the redis benchmark
+     * will be able to close/open sockets a zillion of times */
+    if (setsockopt(fd, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, &yes, sizeof(yes)) == -1) {
+        anetSetError(err, "setsockopt SO_EXCLUSIVEADDRUSE: %s", strerror(errno));
+        return ANET_ERR;
+    }
+    return ANET_OK;
+}
+#endif
+
+#ifdef REMOVED_SERVER_CODE
 static int _anetTcpServer(char *err, int port, char *bindaddr, int af, int backlog)
 {
     int s = -1, rv;
@@ -579,6 +651,7 @@ int anetUnixAccept(char *err, int s) {
 
     return fd;
 }
+#endif // REMOVED_SERVER_CODE
 
 int anetFdToString(int fd, char *ip, size_t ip_len, int *port, int remote) {
     struct sockaddr_storage sa;
@@ -628,6 +701,7 @@ error:
     return -1;
 }
 
+#ifdef REMOVED_SERVER_CODE
 /* Create a pipe buffer with given flags for read end and write end.
  * Note that it supports the file flags defined by pipe2() and fcntl(F_SETFL),
  * and one of the use cases is O_CLOEXEC|O_NONBLOCK. */
@@ -683,6 +757,7 @@ error:
     close(fds[1]);
     return -1;
 }
+#endif // REMOVED_SERVER_CODE
 
 int anetSetSockMarkId(char *err, int fd, uint32_t id) {
 #ifdef HAVE_SOCKOPTMARKID

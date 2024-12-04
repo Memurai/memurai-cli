@@ -81,6 +81,9 @@ typedef struct redisAsyncContext {
         /* Hooks that are called when the library expects to start
          * reading/writing. These functions should be idempotent. */
         void (*addRead)(void *privdata);
+#ifdef _WIN32
+        void (*forceAddRead)(void *privdata);
+#endif
         void (*delRead)(void *privdata);
         void (*addWrite)(void *privdata);
         void (*delWrite)(void *privdata);
@@ -116,12 +119,14 @@ typedef struct redisAsyncContext {
 } redisAsyncContext;
 
 /* Functions that proxy to hiredis */
+#ifdef REMOVED_SERVER_CODE
 redisAsyncContext *redisAsyncConnectWithOptions(const redisOptions *options);
 redisAsyncContext *redisAsyncConnect(const char *ip, int port);
 redisAsyncContext *redisAsyncConnectBind(const char *ip, int port, const char *source_addr);
 redisAsyncContext *redisAsyncConnectBindWithReuse(const char *ip, int port,
                                                   const char *source_addr);
 redisAsyncContext *redisAsyncConnectUnix(const char *path);
+#endif // REMOVED_SERVER_CODE
 int redisAsyncSetConnectCallback(redisAsyncContext *ac, redisConnectCallback *fn);
 int redisAsyncSetConnectCallbackNC(redisAsyncContext *ac, redisConnectCallbackNC *fn);
 int redisAsyncSetDisconnectCallback(redisAsyncContext *ac, redisDisconnectCallback *fn);

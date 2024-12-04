@@ -46,11 +46,14 @@
 /* For Windows we use winsock. */
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x0600 /* To get WSAPoll etc. */
-#include <winsock2.h>
+#define FDAPI_NOCRTREDEFS
+#include "../../src/Win32_Interop/Win32_FDAPI.h"
 #include <ws2tcpip.h>
 #include <stddef.h>
 #include <errno.h>
 #include <mstcpip.h>
+
+#include "../../src/Win32_Interop/win32_types_hiredis.h"
 
 #ifdef _MSC_VER
 typedef long long ssize_t;
@@ -60,19 +63,19 @@ typedef long long ssize_t;
 int win32_getaddrinfo(const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res);
 const char *win32_gai_strerror(int errcode);
 void win32_freeaddrinfo(struct addrinfo *res);
-SOCKET win32_socket(int domain, int type, int protocol);
-int win32_ioctl(SOCKET fd, unsigned long request, unsigned long *argp);
-int win32_bind(SOCKET sockfd, const struct sockaddr *addr, socklen_t addrlen);
-int win32_connect(SOCKET sockfd, const struct sockaddr *addr, socklen_t addrlen);
-int win32_getsockopt(SOCKET sockfd, int level, int optname, void *optval, socklen_t *optlen);
-int win32_setsockopt(SOCKET sockfd, int level, int optname, const void *optval, socklen_t optlen);
-int win32_close(SOCKET fd);
-ssize_t win32_recv(SOCKET sockfd, void *buf, size_t len, int flags);
-ssize_t win32_send(SOCKET sockfd, const void *buf, size_t len, int flags);
+int win32_socket(int domain, int type, int protocol);
+int win32_ioctl(int fd, unsigned long request, unsigned long *argp);
+int win32_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+int win32_connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+int win32_getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen);
+int win32_setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
+int win32_close(int fd);
+ssize_t win32_recv(int sockfd, void *buf, size_t len, int flags);
+ssize_t win32_send(int sockfd, const void *buf, size_t len, int flags);
 typedef ULONG nfds_t;
 int win32_poll(struct pollfd *fds, nfds_t nfds, int timeout);
 
-int win32_redisKeepAlive(SOCKET sockfd, int interval_ms);
+int win32_redisKeepAlive(int sockfd, int interval_ms);
 
 #ifndef REDIS_SOCKCOMPAT_IMPLEMENTATION
 #define getaddrinfo(node, service, hints, res) win32_getaddrinfo(node, service, hints, res)

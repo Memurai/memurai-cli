@@ -28,6 +28,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
 #include "fmacros.h"
 #include "config.h"
 #include "solarisfixes.h"
@@ -35,7 +38,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <assert.h>
 
 #ifdef __linux__
@@ -51,7 +56,9 @@ void zlibc_free(void *ptr) {
 }
 
 #include <string.h>
+#ifndef _WIN32
 #include <pthread.h>
+#endif
 #include "zmalloc.h"
 #include "atomicvar.h"
 
@@ -71,7 +78,7 @@ void zlibc_free(void *ptr) {
 /* When using the libc allocator, use a minimum allocation size to match the
  * jemalloc behavior that doesn't return NULL in this case.
  */
-#define MALLOC_MIN_SIZE(x) ((x) > 0 ? (x) : sizeof(long))
+#define MALLOC_MIN_SIZE(x) ((x) > 0 ? (x) : sizeof(PORT_LONG))
 
 /* Explicitly override malloc/free etc when using tcmalloc. */
 #if defined(USE_TCMALLOC)
@@ -459,7 +466,7 @@ void zmadvise_dontneed(void *ptr) {
 #endif
 
 /* Get the i'th field from "/proc/self/stats" note i is 1 based as appears in the 'proc' man page */
-int get_proc_stat_ll(int i, long long *res) {
+int get_proc_stat_ll(int i, PORT_LONGLONG *res) {
 #if defined(HAVE_PROC_STAT)
     char buf[4096];
     int fd, l;
@@ -504,7 +511,7 @@ int get_proc_stat_ll(int i, long long *res) {
 #if defined(HAVE_PROC_STAT)
 size_t zmalloc_get_rss(void) {
     int page = sysconf(_SC_PAGESIZE);
-    long long rss;
+    PORT_LONGLONG rss;
 
     /* RSS is the 24th field in /proc/<pid>/stat */
     if (!get_proc_stat_ll(24, &rss)) return 0;
@@ -603,7 +610,7 @@ size_t zmalloc_get_rss(void) {
     char filename[256];
     int fd;
 
-    snprintf(filename,256,"/proc/%ld/psinfo",(long) getpid());
+    snprintf(filename,256,"/proc/%ld/psinfo",(PORT_LONG) getpid());
 
     if ((fd = open(filename,O_RDONLY)) == -1) return 0;
     if (ioctl(fd, PIOCPSINFO, &info) == -1) {
@@ -707,7 +714,7 @@ int jemalloc_purge(void) {
  * Example: zmalloc_get_smap_bytes_by_field("Rss:",-1);
  */
 #if defined(HAVE_PROC_SMAPS)
-size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
+size_t zmalloc_get_smap_bytes_by_field(char *field, PORT_LONG pid) {
     char line[1024];
     size_t bytes = 0;
     int flen = strlen(field);
@@ -717,7 +724,7 @@ size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
         fp = fopen("/proc/self/smaps","r");
     } else {
         char filename[128];
-        snprintf(filename,sizeof(filename),"/proc/%ld/smaps",pid);
+        snprintf(filename,sizeof(filename),"/proc/%zd/smaps",pid);        WIN_PORT_FIX /* %ld -> %zd */
         fp = fopen(filename,"r");
     }
 
@@ -742,7 +749,7 @@ size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
  * Note that AnonHugePages is a no-op as THP feature
  * is not supported in this platform
  */
-size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
+size_t zmalloc_get_smap_bytes_by_field(char *field, PORT_LONG pid) {
 #if defined(__APPLE__)
     struct proc_regioninfo pri;
     if (pid == -1) pid = getpid();
@@ -771,7 +778,7 @@ size_t zmalloc_get_smap_bytes_by_field(char *field, long pid) {
  * Note: depending on the platform and memory footprint of the process, this
  * call can be slow, exceeding 1000ms!
  */
-size_t zmalloc_get_private_dirty(long pid) {
+size_t zmalloc_get_private_dirty(PORT_LONG pid) {
     return zmalloc_get_smap_bytes_by_field("Private_Dirty:",pid);
 }
 

@@ -32,6 +32,8 @@
 #include "sockcompat.h"
 
 #ifdef _WIN32
+#include <assert.h>
+
 static int _wsaErrorToErrno(int err) {
     switch (err) {
         case WSAEWOULDBLOCK:
@@ -95,30 +97,11 @@ static int _wsaErrorToErrno(int err) {
 }
 
 static void _updateErrno(int success) {
-    errno = success ? 0 : _wsaErrorToErrno(WSAGetLastError());
-}
-
-static int _initWinsock() {
-    static int s_initialized = 0;
-    if (!s_initialized) {
-        static WSADATA wsadata;
-        int err = WSAStartup(MAKEWORD(2,2), &wsadata);
-        if (err != 0) {
-            errno = _wsaErrorToErrno(err);
-            return 0;
-        }
-        s_initialized = 1;
-    }
-    return 1;
+    errno = success ? 0 : _wsaErrorToErrno(FDAPI_WSAGetLastError());
 }
 
 int win32_getaddrinfo(const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res) {
-    /* Note: This function is likely to be called before other functions, so run init here. */
-    if (!_initWinsock()) {
-        return EAI_FAIL;
-    }
-
-    switch (getaddrinfo(node, service, hints, res)) {
+    switch (FDAPI_getaddrinfo(node, service, hints, res)) {
         case 0:                     return 0;
         case WSATRY_AGAIN:          return EAI_AGAIN;
         case WSAEINVAL:             return EAI_BADFLAGS;
@@ -147,35 +130,30 @@ const char *win32_gai_strerror(int errcode) {
 }
 
 void win32_freeaddrinfo(struct addrinfo *res) {
-    freeaddrinfo(res);
+    FDAPI_freeaddrinfo(res);
 }
 
-SOCKET win32_socket(int domain, int type, int protocol) {
-    SOCKET s;
+int win32_socket(int domain, int type, int protocol) {
+    int s;
 
-    /* Note: This function is likely to be called before other functions, so run init here. */
-    if (!_initWinsock()) {
-        return INVALID_SOCKET;
-    }
-
-    _updateErrno((s = socket(domain, type, protocol)) != INVALID_SOCKET);
+    _updateErrno((s = FDAPI_socket(domain, type, protocol)) != INVALID_SOCKET);
     return s;
 }
 
-int win32_ioctl(SOCKET fd, unsigned long request, unsigned long *argp) {
-    int ret = ioctlsocket(fd, (long)request, argp);
+int win32_ioctl(int fd, unsigned long request, unsigned long *argp) {
+    int ret = FDAPI_ioctl(fd, request, argp);
     _updateErrno(ret != SOCKET_ERROR);
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-int win32_bind(SOCKET sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-    int ret = bind(sockfd, addr, addrlen);
+int win32_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+    int ret = FDAPI_bind(sockfd, addr, addrlen);
     _updateErrno(ret != SOCKET_ERROR);
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-int win32_connect(SOCKET sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-    int ret = connect(sockfd, addr, addrlen);
+int win32_connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+    int ret = FDAPI_connect(sockfd, addr, addrlen);
     _updateErrno(ret != SOCKET_ERROR);
 
     /* For Winsock connect(), the WSAEWOULDBLOCK error means the same thing as
@@ -195,14 +173,14 @@ int win32_connect(SOCKET sockfd, const struct sockaddr *addr, socklen_t addrlen)
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-int win32_getsockopt(SOCKET sockfd, int level, int optname, void *optval, socklen_t *optlen) {
+int win32_getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen) {
     int ret = 0;
     if ((level == SOL_SOCKET) && ((optname == SO_RCVTIMEO) || (optname == SO_SNDTIMEO))) {
         if (*optlen >= sizeof (struct timeval)) {
             struct timeval *tv = optval;
             DWORD timeout = 0;
             socklen_t dwlen = 0;
-            ret = getsockopt(sockfd, level, optname, (char *)&timeout, &dwlen);
+            ret = FDAPI_getsockopt(sockfd, level, optname, (char *)&timeout, &dwlen);
             tv->tv_sec = timeout / 1000;
             tv->tv_usec = (timeout * 1000) % 1000000;
         } else {
@@ -210,7 +188,7 @@ int win32_getsockopt(SOCKET sockfd, int level, int optname, void *optval, sockle
         }
         *optlen = sizeof (struct timeval);
     } else {
-        ret = getsockopt(sockfd, level, optname, (char*)optval, optlen);
+        ret = FDAPI_getsockopt(sockfd, level, optname, (char*)optval, optlen);
     }
     if (ret != SOCKET_ERROR && level == SOL_SOCKET && optname == SO_ERROR) {
         /* translate SO_ERROR codes, if non-zero */
@@ -224,44 +202,45 @@ int win32_getsockopt(SOCKET sockfd, int level, int optname, void *optval, sockle
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-int win32_setsockopt(SOCKET sockfd, int level, int optname, const void *optval, socklen_t optlen) {
+int win32_setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen) {
     int ret = 0;
     if ((level == SOL_SOCKET) && ((optname == SO_RCVTIMEO) || (optname == SO_SNDTIMEO))) {
         const struct timeval *tv = optval;
         DWORD timeout = tv->tv_sec * 1000 + tv->tv_usec / 1000;
-        ret = setsockopt(sockfd, level, optname, (const char*)&timeout, sizeof(DWORD));
+        ret = FDAPI_setsockopt(sockfd, level, optname, (const char*)&timeout, sizeof(DWORD));
     } else {
-        ret = setsockopt(sockfd, level, optname, (const char*)optval, optlen);
+        ret = FDAPI_setsockopt(sockfd, level, optname, (const char*)optval, optlen);
     }
     _updateErrno(ret != SOCKET_ERROR);
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-int win32_close(SOCKET fd) {
-    int ret = closesocket(fd);
+int win32_close(int fd) {
+    int ret = FDAPI_close(fd);
     _updateErrno(ret != SOCKET_ERROR);
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-ssize_t win32_recv(SOCKET sockfd, void *buf, size_t len, int flags) {
-    int ret = recv(sockfd, (char*)buf, (int)len, flags);
+ssize_t win32_recv(int sockfd, void *buf, size_t len, int flags) {
+    ssize_t ret = FDAPI_read(sockfd, (char*)buf, (int)len);
     _updateErrno(ret != SOCKET_ERROR);
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-ssize_t win32_send(SOCKET sockfd, const void *buf, size_t len, int flags) {
-    int ret = send(sockfd, (const char*)buf, (int)len, flags);
+ssize_t win32_send(int sockfd, const void *buf, size_t len, int flags) {
+    ssize_t ret = FDAPI_write(sockfd, (const char*)buf, (int)len);
     _updateErrno(ret != SOCKET_ERROR);
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
 int win32_poll(struct pollfd *fds, nfds_t nfds, int timeout) {
-    int ret = WSAPoll(fds, nfds, timeout);
+    assert(nfds == 1);
+    int ret = FDAPI_poll(fds, nfds, timeout);
     _updateErrno(ret != SOCKET_ERROR);
     return ret != SOCKET_ERROR ? ret : -1;
 }
 
-int win32_redisKeepAlive(SOCKET sockfd, int interval_ms) {
+int win32_redisKeepAlive(int sockfd, int interval_ms) {
     struct tcp_keepalive cfg;
     DWORD bytes_in;
     int res;
@@ -270,7 +249,7 @@ int win32_redisKeepAlive(SOCKET sockfd, int interval_ms) {
     cfg.keepaliveinterval = interval_ms;
     cfg.keepalivetime = interval_ms;
 
-    res = WSAIoctl(sockfd, SIO_KEEPALIVE_VALS, &cfg,
+    res = FDAPI_WSAIoctl(sockfd, SIO_KEEPALIVE_VALS, &cfg,
                    sizeof(struct tcp_keepalive), NULL, 0,
                    &bytes_in, NULL, NULL);
 

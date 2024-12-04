@@ -35,11 +35,16 @@
 #include "redisassert.h"
 
 #include <stdio.h>
-#include <sys/time.h>
 #include <sys/types.h>
+#ifdef _WIN32
+#include <sys/timeb.h>
+#include "Win32_Interop/Win32_FDAPI.h"
+#else
+#include <sys/time.h>
 #include <unistd.h>
-#include <stdlib.h>
 #include <poll.h>
+#endif
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <errno.h>
@@ -47,6 +52,7 @@
 #include "zmalloc.h"
 #include "config.h"
 
+#ifdef REMOVED_SERVER_CODE
 /* Include the best multiplexing layer supported by this system.
  * The following should be ordered by performances, descending. */
 #ifdef HAVE_EVPORT
@@ -62,6 +68,7 @@
         #endif
     #endif
 #endif
+
 
 
 aeEventLoop *aeCreateEventLoop(int setsize) {
@@ -216,11 +223,11 @@ int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
     return fe->mask;
 }
 
-long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
+PORT_LONGLONG aeCreateTimeEvent(aeEventLoop *eventLoop, PORT_LONGLONG milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
 {
-    long long id = eventLoop->timeEventNextId++;
+    PORT_LONGLONG id = eventLoop->timeEventNextId++;
     aeTimeEvent *te;
 
     te = zmalloc(sizeof(*te));
@@ -239,7 +246,7 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     return id;
 }
 
-int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
+int aeDeleteTimeEvent(aeEventLoop *eventLoop, PORT_LONGLONG id)
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
     while(te) {
@@ -280,13 +287,13 @@ static int64_t usUntilEarliestTimer(aeEventLoop *eventLoop) {
 static int processTimeEvents(aeEventLoop *eventLoop) {
     int processed = 0;
     aeTimeEvent *te;
-    long long maxId;
+    PORT_LONGLONG maxId;
 
     te = eventLoop->timeEventHead;
     maxId = eventLoop->timeEventNextId-1;
     monotime now = getMonotonicUs();
     while(te) {
-        long long id;
+        PORT_LONGLONG id;
 
         /* Remove events scheduled for deletion. */
         if (te->id == AE_DELETED_EVENT_ID) {
@@ -467,10 +474,11 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
     return processed; /* return the number of processed file/time events */
 }
+#endif // REMOVED_SERVER_CODE
 
 /* Wait for milliseconds until the given file descriptor becomes
  * writable/readable/exception */
-int aeWait(int fd, int mask, long long milliseconds) {
+int aeWait(int fd, int mask, PORT_LONGLONG milliseconds) {
     struct pollfd pfd;
     int retmask = 0, retval;
 
@@ -490,6 +498,7 @@ int aeWait(int fd, int mask, long long milliseconds) {
     }
 }
 
+#ifdef REMOVED_SERVER_CODE
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
     while (!eventLoop->stop) {
@@ -510,3 +519,4 @@ void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep
 void aeSetAfterSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *aftersleep) {
     eventLoop->aftersleep = aftersleep;
 }
+#endif // REMOVED_SERVER_CODE

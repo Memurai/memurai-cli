@@ -26,6 +26,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE. */
 
+#include "Win32_Interop/win32_types_hiredis.h"
+
 #include "crc64.h"
 #include "crcspeed.h"
 static uint64_t crc64_table[8][256] = {{0}};
@@ -87,7 +89,7 @@ static inline uint_fast64_t crc_reflect(uint_fast64_t data, size_t data_len) {
  ******************************************************************************/
 uint64_t _crc64(uint_fast64_t crc, const void *in_data, const uint64_t len) {
     const uint8_t *data = in_data;
-    unsigned long long bit;
+    PORT_ULONGLONG bit;
 
     for (uint64_t offset = 0; offset < len; offset++) {
         uint8_t c = data[offset];

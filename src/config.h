@@ -48,6 +48,9 @@
 #if defined(__APPLE__) && !defined(MAC_OS_10_6_DETECTED)
 #define redis_fstat fstat64
 #define redis_stat stat64
+#elif defined(_WIN32)
+#define redis_fstat fdapi_fstat64
+#define redis_stat __stat64
 #else
 #define redis_fstat fstat
 #define redis_stat stat
@@ -241,6 +244,10 @@ void setproctitle(const char *fmt, ...);
 #endif
 #endif
 #endif
+#endif
+
+#if defined(_WIN32) && !defined(BYTE_ORDER)
+#define BYTE_ORDER LITTLE_ENDIAN
 #endif
 
 #if !defined(BYTE_ORDER) || \

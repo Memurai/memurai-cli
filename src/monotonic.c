@@ -7,6 +7,11 @@
 #undef NDEBUG
 #include <assert.h>
 
+#ifdef _WIN32
+#include "Win32_Interop/Win32_Time.h"
+#endif
+#include "Win32_Interop/Win32_Portability.h"
+
 
 /* The function pointer for clock retrieval.  */
 monotime (*getMonotonicUs)(void) = NULL;
@@ -30,7 +35,7 @@ static char monotonic_info_string[32];
 #include <regex.h>
 #include <x86intrin.h>
 
-static long mono_ticksPerMicrosecond = 0;
+static PORT_LONG mono_ticksPerMicrosecond = 0;
 
 static monotime getMonotonicUs_x86(void) {
     return __rdtsc() / mono_ticksPerMicrosecond;
@@ -63,7 +68,7 @@ static void monotonicInit_x86linux(void) {
             if (regexec(&cpuGhzRegex, buf, nmatch, pmatch, 0) == 0) {
                 buf[pmatch[1].rm_eo] = '\0';
                 double ghz = atof(&buf[pmatch[1].rm_so]);
-                mono_ticksPerMicrosecond = (long)(ghz * 1000);
+                mono_ticksPerMicrosecond = (PORT_LONG)(ghz * 1000);
                 break;
             }
         }
@@ -96,7 +101,7 @@ static void monotonicInit_x86linux(void) {
 
 
 #if defined(USE_PROCESSOR_CLOCK) && defined(__aarch64__)
-static long mono_ticksPerMicrosecond = 0;
+static PORT_LONG mono_ticksPerMicrosecond = 0;
 
 /* Read the clock value.  */
 static inline uint64_t __cntvct(void) {
@@ -117,7 +122,7 @@ static monotime getMonotonicUs_aarch64(void) {
 }
 
 static void monotonicInit_aarch64(void) {
-    mono_ticksPerMicrosecond = (long)cntfrq_hz() / 1000L / 1000L;
+    mono_ticksPerMicrosecond = (PORT_LONG)cntfrq_hz() / 1000L / 1000L;
     if (mono_ticksPerMicrosecond == 0) {
         fprintf(stderr, "monotonic: aarch64, unable to determine clock rate");
         return;
@@ -129,6 +134,19 @@ static void monotonicInit_aarch64(void) {
 }
 #endif
 
+#ifdef _WIN32
+
+monotime getMonotonicUs_windows(void) {
+    return GetHighResRelativeTime(1000000);
+}
+
+const char* monotonicInit() {
+    snprintf(monotonic_info_string, sizeof(monotonic_info_string), "Windows QueryPerformanceCounter");
+    getMonotonicUs = getMonotonicUs_windows;
+    return monotonic_info_string;
+}
+
+#else // _WIN32
 
 static monotime getMonotonicUs_posix(void) {
     /* clock_gettime() is specified in POSIX.1b (1993).  Even so, some systems
@@ -169,12 +187,13 @@ const char * monotonicInit(void) {
     return monotonic_info_string;
 }
 
+#endif // _WIN32
 const char *monotonicInfoString(void) {
     return monotonic_info_string;
 }
 
 monotonic_clock_type monotonicGetType(void) {
-    if (getMonotonicUs == getMonotonicUs_posix)
+    if (getMonotonicUs == IF_WIN32(getMonotonicUs_windows, getMonotonicUs_posix))
         return MONOTONIC_CLOCK_POSIX;
     return MONOTONIC_CLOCK_HW;
 }

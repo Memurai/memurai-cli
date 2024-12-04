@@ -28,24 +28,52 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
+#ifdef _WIN32
+#include "Win32_Interop/Win32_Time.h"
+#endif
+
 #include "fmacros.h"
 #include "version.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <signal.h>
 #include <unistd.h>
+#endif
 #include <time.h>
 #include <ctype.h>
 #include <errno.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#endif
 #include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <math.h>
+#ifndef _WIN32
 #include <termios.h>
+#endif
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include "Win32_Interop/Win32_APIs.h"
+#include "Win32_Interop/Win32_FDAPI.h"
+#include "Win32_Interop/Win32_Signal_Process.h"
+#include "Win32_Interop/Win32_ANSI.h"
+#include "Win32_Interop/Win32_WindowsFeatures.h"
+#include <windows.h>
+#include <winsock2.h>
+#pragma comment(lib, "Ws2_32.lib")
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#define printf ANSI_printf
+#endif
 
 #include <hiredis.h>
 #ifdef USE_OPENSSL
@@ -77,9 +105,9 @@
 #define REDIS_CLI_KEEPALIVE_INTERVAL 15 /* seconds */
 #define REDIS_CLI_DEFAULT_PIPE_TIMEOUT 30 /* seconds */
 #define REDIS_CLI_HISTFILE_ENV "REDISCLI_HISTFILE"
-#define CLI_HISTFILE_DEFAULT ".valkeycli_history"
+#define CLI_HISTFILE_DEFAULT ".memuraicli_history"
 #define REDIS_CLI_RCFILE_ENV "REDISCLI_RCFILE"
-#define CLI_RCFILE_DEFAULT ".valkeyclirc"
+#define CLI_RCFILE_DEFAULT ".memurairc"
 #define REDIS_CLI_AUTH_ENV "REDISCLI_AUTH"
 #define REDIS_CLI_CLUSTER_YES_ENV "REDISCLI_CLUSTER_YES"
 
@@ -175,7 +203,9 @@ int *spectrum_palette;
 int spectrum_palette_size;
 
 static int orig_termios_saved = 0;
+#ifndef _WIN32
 static struct termios orig_termios; /* To restore terminal at exit.*/
+#endif
 
 /* Dict Helpers */
 static uint64_t dictSdsHash(const void *key);
@@ -216,8 +246,8 @@ static struct config {
     char *hostsocket;
     int tls;
     cliSSLconfig sslconfig;
-    long repeat;
-    long interval;
+    PORT_LONG repeat;
+    PORT_LONG interval;
     int dbnum; /* db num currently selected */
     int interactive;
     int shutdown;
@@ -228,7 +258,7 @@ static struct config {
     int latency_dist_mode;
     int latency_history;
     int lru_test_mode;
-    long long lru_test_sample_size;
+    PORT_LONGLONG lru_test_sample_size;
     int cluster_mode;
     int cluster_reissue_command;
     int cluster_send_asking;
@@ -292,7 +322,7 @@ char *redisGitDirty(void);
 static int cliConnect(int flags);
 
 static char *getInfoField(char *info, char *field);
-static long getLongInfoField(char *info, char *field);
+static PORT_LONG getLongInfoField(char *info, char *field);
 
 /*------------------------------------------------------------------------------
  * Utility functions
@@ -303,17 +333,21 @@ static void cliPushHandler(void *, void *);
 
 uint16_t crc16(const char *buf, int len);
 
-static long long ustime(void) {
+static PORT_LONGLONG ustime(void) {
+#ifdef _WIN32
+    return GetHighResRelativeTime(1000000);
+#else
     struct timeval tv;
-    long long ust;
+    PORT_LONGLONG ust;
 
     gettimeofday(&tv, NULL);
-    ust = ((long long)tv.tv_sec)*1000000;
+    ust = ((PORT_LONGLONG)tv.tv_sec)*1000000;
     ust += tv.tv_usec;
     return ust;
+#endif
 }
 
-static long long mstime(void) {
+static PORT_LONGLONG mstime(void) {
     return ustime()/1000;
 }
 
@@ -322,7 +356,7 @@ static void cliRefreshPrompt(void) {
 
     sds prompt = sdsempty();
     if (config.hostsocket != NULL) {
-        prompt = sdscatfmt(prompt,"valkey %s",config.hostsocket);
+        prompt = sdscatfmt(prompt,"memurai %s",config.hostsocket);
     } else {
         char addr[256];
         formatAddr(addr, sizeof(addr), config.conn_info.hostip, config.conn_info.hostport);
@@ -426,7 +460,7 @@ static int helpEntriesLen = 0;
 
 static sds cliVersion(void) {
     sds version;
-    version = sdscatprintf(sdsempty(), "%s", REDIS_VERSION);
+    version = sdscatprintf(sdsempty(), "%s", MEMURAI_VERSION);
 
     /* Add git commit and working tree status when available */
     if (strtoll(redisGitSHA1(),NULL,16)) {
@@ -964,17 +998,17 @@ static void cliOutputCommandHelp(struct commandDocs *help, int group) {
 static void cliOutputGenericHelp(void) {
     sds version = cliVersion();
     printf(
-        "valkey-cli %s\n"
-        "To get help about Valkey commands type:\n"
+        "memurai-cli %s\n"
+        "To get help about Memurai commands type:\n"
         "      \"help @<group>\" to get a list of commands in <group>\n"
         "      \"help <command>\" for help on <command>\n"
         "      \"help <tab>\" to get a list of possible help topics\n"
         "      \"quit\" to exit\n"
         "\n"
-        "To set valkey-cli preferences:\n"
+        "To set memurai-cli preferences:\n"
         "      \":set hints\" enable online hints\n"
         "      \":set nohints\" disable online hints\n"
-        "Set your preferences in ~/.valkeyclirc\n",
+        "Set your preferences in ~/.memurairc\n",
         version
     );
     sdsfree(version);
@@ -1261,7 +1295,7 @@ static int matchNoTokenArg(char **nextword, int numwords, cliCommandArg *arg) {
 
     case ARG_TYPE_INTEGER:
     case ARG_TYPE_UNIX_TIME: {
-        long long value;
+        PORT_LONGLONG value;
         if (sscanf(*nextword, "%lld", &value)) {
             arg->matched += 1;
             arg->matched_name = 1;
@@ -1542,6 +1576,7 @@ static void freeHintsCallback(void *ptr) {
  * TTY manipulation
  *--------------------------------------------------------------------------- */
 
+#ifndef _WIN32
 /* Restore terminal if we've changed it. */
 void cliRestoreTTY(void) {
     if (orig_termios_saved)
@@ -1560,6 +1595,7 @@ static void cliPressAnyKeyTTY(void) {
     mode.c_lflag &= ~(ECHO | ICANON); /* echoing off, canonical off */
     tcsetattr(STDIN_FILENO, TCSANOW, &mode);
 }
+#endif
 
 /*------------------------------------------------------------------------------
  * Networking / parsing
@@ -1681,7 +1717,7 @@ static int cliConnect(int flags) {
 
         if (context->err) {
             if (!(flags & CC_QUIET)) {
-                fprintf(stderr,"Could not connect to Valkey at ");
+                fprintf(stderr,"Could not connect to Memurai at ");
                 if (config.hostsocket == NULL ||
                     (config.cluster_mode && config.cluster_reissue_command))
                 {
@@ -1853,7 +1889,7 @@ static sds cliFormatReplyTTY(redisReply *r, char *prefix) {
             sds tmp;
 
             /* Calculate chars needed to represent the largest index */
-            i = r->elements;
+            i = (unsigned int)r->elements;                                        WIN_PORT_FIX /* cast (unsigned int) */
             if (r->type == REDIS_REPLY_MAP) i /= 2;
             do {
                 idxlen++;
@@ -2329,7 +2365,9 @@ static void cliWaitForMessagesOrStdin(void) {
     int show_info = config.output != OUTPUT_RAW && (isatty(STDOUT_FILENO) ||
                                                     getenv("FAKETTY"));
     int use_color = show_info && isColorTerm();
+#ifndef _WIN32
     cliPressAnyKeyTTY();
+#endif
     while (config.pubsub_mode) {
         /* First check if there are any buffered replies. */
         redisReply *reply;
@@ -2386,10 +2424,12 @@ static void cliWaitForMessagesOrStdin(void) {
             break;
         }
     }
+#ifndef _WIN32
     cliRestoreTTY();
+#endif
 }
 
-static int cliSendCommand(int argc, char **argv, long repeat) {
+static int cliSendCommand(int argc, char** argv, PORT_LONG repeat) {
     char *command = argv[0];
     size_t *argvlen;
     int j, output_raw;
@@ -2664,13 +2704,15 @@ static int parseOptions(int argc, char **argv) {
                 fprintf(stderr, "Invalid server port.\n");
                 exit(1);
             }
+#ifndef _WIN32
         } else if (!strcmp(argv[i],"-s") && !lastarg) {
             config.hostsocket = argv[++i];
+#endif
         } else if (!strcmp(argv[i],"-r") && !lastarg) {
             config.repeat = strtoll(argv[++i],NULL,10);
         } else if (!strcmp(argv[i],"-i") && !lastarg) {
             double seconds = atof(argv[++i]);
-            config.interval = seconds*1000000;
+            config.interval = (PORT_LONG) (seconds*1000000);              WIN_PORT_FIX /* cast (PORT_LONG) */
         } else if (!strcmp(argv[i],"-n") && !lastarg) {
             config.conn_info.input_dbnum = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--no-auth-warning")) {
@@ -2767,6 +2809,7 @@ static int parseOptions(int argc, char **argv) {
             config.hotkeys = 1;
         } else if (!strcmp(argv[i],"--eval") && !lastarg) {
             config.eval = argv[++i];
+#ifndef _WIN32
         } else if (!strcmp(argv[i],"--ldb")) {
             config.eval_ldb = 1;
             config.output = OUTPUT_RAW;
@@ -2774,6 +2817,7 @@ static int parseOptions(int argc, char **argv) {
             config.eval_ldb = 1;
             config.eval_ldb_sync = 1;
             config.output = OUTPUT_RAW;
+#endif
         } else if (!strcmp(argv[i],"-c")) {
             config.cluster_mode = 1;
         } else if (!strcmp(argv[i],"-d") && !lastarg) {
@@ -2899,7 +2943,7 @@ static int parseOptions(int argc, char **argv) {
 #endif
         } else if (!strcmp(argv[i],"-v") || !strcmp(argv[i], "--version")) {
             sds version = cliVersion();
-            printf("valkey-cli %s\n", version);
+            printf("memurai-cli %s\n", version);
             sdsfree(version);
             exit(0);
         } else if (!strcmp(argv[i],"-2")) {
@@ -3013,12 +3057,12 @@ static void usage(int err) {
 "";
 
     fprintf(target,
-"valkey-cli %s\n"
+"memurai-cli %s\n"
 "\n"
-"Usage: valkey-cli [OPTIONS] [cmd [arg [arg ...]]]\n"
+"Usage: memurai-cli [OPTIONS] [cmd [arg [arg ...]]]\n"
 "  -h <hostname>      Server hostname (default: 127.0.0.1).\n"
 "  -p <port>          Server port (default: 6379).\n"
-"  -s <socket>        Server socket (overrides hostname and port).\n"
+POSIX_ONLY("  -s <socket>        Server socket (overrides hostname and port).\n")
 "  -a <password>      Password to use when connecting to the server.\n"
 "                     You can also use the " REDIS_CLI_AUTH_ENV " environment\n"
 "                     variable to pass this password more safely\n"
@@ -3095,10 +3139,12 @@ version,tls_usage);
 "  --intrinsic-latency <sec> Run a test to measure intrinsic system latency.\n"
 "                     The test will run for the specified amount of seconds.\n"
 "  --eval <file>      Send an EVAL command using the Lua script at <file>.\n"
+#ifndef _WIN32
 "  --ldb              Used with --eval enable the Server Lua debugger.\n"
 "  --ldb-sync-mode    Like --ldb but uses the synchronous Lua debugger, in\n"
 "                     this mode the server is blocked and script changes are\n"
 "                     not rolled back from the server memory.\n"
+#endif
 "  --cluster <command> [args...] [opts...]\n"
 "                     Cluster Manager command and arguments (see below).\n"
 "  --verbose          Verbose mode.\n"
@@ -3113,19 +3159,19 @@ version,tls_usage);
 "  Use --cluster help to list all available cluster manager commands.\n"
 "\n"
 "Examples:\n"
-"  valkey-cli -u redis://default:PASSWORD@localhost:6379/0\n"
-"  cat /etc/passwd | valkey-cli -x set mypasswd\n"
-"  valkey-cli -D \"\" --raw dump key > key.dump && valkey-cli -X dump_tag restore key2 0 dump_tag replace < key.dump\n"
-"  valkey-cli -r 100 lpush mylist x\n"
-"  valkey-cli -r 100 -i 1 info | grep used_memory_human:\n"
-"  valkey-cli --quoted-input set '\"null-\\x00-separated\"' value\n"
-"  valkey-cli --eval myscript.lua key1 key2 , arg1 arg2 arg3\n"
-"  valkey-cli --scan --pattern '*:12345*'\n"
-"  valkey-cli --scan --pattern '*:12345*' --count 100\n"
+"  memurai-cli -u redis://default:PASSWORD@localhost:6379/0\n"
+"  cat /etc/passwd | memurai-cli -x set mypasswd\n"
+"  memurai-cli -D \"\" --raw dump key > key.dump && memurai-cli -X dump_tag restore key2 0 dump_tag replace < key.dump\n"
+"  memurai-cli -r 100 lpush mylist x\n"
+"  memurai-cli -r 100 -i 1 info | grep used_memory_human:\n"
+"  memurai-cli --quoted-input set '\"null-\\x00-separated\"' value\n"
+"  memurai-cli --eval myscript.lua key1 key2 , arg1 arg2 arg3\n"
+"  memurai-cli --scan --pattern '*:12345*'\n"
+"  redis-cli --scan --pattern '*:12345*' --count 100\n"
 "\n"
 "  (Note: when using --eval the comma separates KEYS[] from ARGV[] items)\n"
 "\n"
-"When no command is given, valkey-cli starts in interactive mode.\n"
+"When no command is given, memurai-cli starts in interactive mode.\n"
 "Type \"help\" in interactive mode for information on available commands\n"
 "and settings.\n"
 "\n");
@@ -3149,7 +3195,7 @@ static int confirmWithYes(char *msg, int ignore_force) {
     return (nread != 0 && !strcmp("yes", buf));
 }
 
-static int issueCommandRepeat(int argc, char **argv, long repeat) {
+static int issueCommandRepeat(int argc, char **argv, PORT_LONG repeat) {
     /* In Lua debugging mode, we want to pass the "help" to Redis to get
      * it's own HELP message, rather than handle it by the CLI, see ldbRepl.
      *
@@ -3210,7 +3256,7 @@ static sds *cliSplitArgs(char *line, int *argc) {
     {
         sds *argv = sds_malloc(sizeof(sds)*2);
         *argc = 2;
-        int len = strlen(line);
+        int len = (int)strlen(line);                                            WIN_PORT_FIX /* cast int */
         int elen = line[1] == ' ' ? 2 : 5; /* "e " or "eval "? */
         argv[0] = sdsnewlen(line,elen-1);
         argv[1] = sdsnewlen(line+elen,len-elen);
@@ -3228,13 +3274,13 @@ void cliSetPreferences(char **argv, int argc, int interactive) {
         if (!strcasecmp(argv[1],"hints")) pref.hints = 1;
         else if (!strcasecmp(argv[1],"nohints")) pref.hints = 0;
         else {
-            printf("%sunknown valkey-cli preference '%s'\n",
-                interactive ? "" : ".valkeyclirc: ",
+            printf("%sunknown memurai-cli preference '%s'\n",
+                interactive ? "" : ".memurairc: ",
                 argv[1]);
         }
     } else {
-        printf("%sunknown valkey-cli internal command '%s'\n",
-            interactive ? "" : ".valkeyclirc: ",
+        printf("%sunknown memurai-cli internal command '%s'\n",
+            interactive ? "" : ".memurairc: ",
             argv[0]);
     }
 }
@@ -3243,7 +3289,7 @@ void cliSetPreferences(char **argv, int argc, int interactive) {
 void cliLoadPreferences(void) {
     sds rcfile = getDotfilePath(REDIS_CLI_RCFILE_ENV,CLI_RCFILE_DEFAULT);
     if (rcfile == NULL) return;
-    FILE *fp = fopen(rcfile,"r");
+    FILE *fp = fopen(rcfile,IF_WIN32("rb","r"));
     char buf[1024];
 
     if (fp) {
@@ -3359,7 +3405,7 @@ static void repl(void) {
             }
             break;
         } else if (line[0] != '\0') {
-            long repeat = 1;
+            PORT_LONG repeat = 1;
             int skipargs = 0;
             char *endptr = NULL;
 
@@ -3383,7 +3429,7 @@ static void repl(void) {
             repeat = strtol(argv[0], &endptr, 10);
             if (argc > 1 && *endptr == '\0') {
                 if (errno == ERANGE || errno == EINVAL || repeat <= 0) {
-                    fputs("Invalid valkey-cli repeat command option value.\n", stdout);
+                    fputs("Invalid memurai-cli repeat command option value.\n", stdout);
                     sdsfreesplitres(argv, argc);
                     linenoiseFree(line);
                     continue;
@@ -3427,7 +3473,7 @@ static void repl(void) {
             } else if (argc == 1 && !strcasecmp(argv[0],"clear")) {
                 linenoiseClearScreen();
             } else {
-                long long start_time = mstime(), elapsed;
+                PORT_LONGLONG start_time = mstime(), elapsed;
 
                 issueCommandRepeat(argc-skipargs, argv+skipargs, repeat);
 
@@ -3536,7 +3582,7 @@ static int evalMode(int argc, char **argv) {
         keys = 0;
 
         /* Load the script from the file, as an sds string. */
-        fp = fopen(config.eval,"r");
+        fp = fopen(config.eval,IF_WIN32("rb","r"));
         if (!fp) {
             fprintf(stderr,
                 "Can't open file '%s': %s\n", config.eval, strerror(errno));
@@ -4060,7 +4106,7 @@ static int clusterManagerNodeConnect(clusterManagerNode *node) {
         }
     }
     if (node->context->err) {
-        fprintf(stderr,"Could not connect to Valkey at ");
+        fprintf(stderr,"Could not connect to Memurai at ");
         fprintf(stderr,"%s:%d: %s\n", node->ip, node->port,
                 node->context->errstr);
         redisFree(node->context);
@@ -4194,7 +4240,7 @@ static int clusterManagerNodeIsEmpty(clusterManagerNode *node, char **err) {
         is_empty = 0;
         goto result;
     }
-    long known_nodes = getLongInfoField(info->str, "cluster_known_nodes");
+    PORT_LONG known_nodes = getLongInfoField(info->str, "cluster_known_nodes");
     is_empty = (known_nodes == 1);
 result:
     freeReplyObject(info);
@@ -4428,7 +4474,7 @@ static sds clusterManagerNodeSlotsString(clusterManagerNode *node) {
 }
 
 static sds clusterManagerNodeGetJSON(clusterManagerNode *node,
-                                     unsigned long error_count)
+                                     PORT_ULONG error_count)
 {
     sds json = sdsempty();
     sds replicate = sdsempty();
@@ -4458,10 +4504,10 @@ static sds clusterManagerNodeGetJSON(clusterManagerNode *node,
         slots,
         node->slots_count,
         flags,
-        (unsigned long long)node->current_epoch
+        (PORT_ULONGLONG)node->current_epoch
     );
     if (error_count > 0) {
-        json = sdscatprintf(json, ",\n    \"cluster_errors\": %lu",
+        json = sdscatprintf(json, ",\n    \"cluster_errors\": %zu",      WIN_PORT_FIX /* %lu -> %zu */
                             error_count);
     }
     if (node->migrating_count > 0 && node->migrating != NULL) {
@@ -4645,7 +4691,7 @@ static int clusterManagerAddSlots(clusterManagerNode *node, char**err)
     for (i = 0; i < CLUSTER_MANAGER_SLOTS; i++) {
         if (argv_idx >= argc) break;
         if (node->slots[i]) {
-            argv[argv_idx] = sdsfromlonglong((long long) i);
+            argv[argv_idx] = sdsfromlonglong((PORT_LONGLONG) i);
             argvlen[argv_idx] = sdslen(argv[argv_idx]);
             argv_idx++;
         }
@@ -5932,7 +5978,7 @@ static int clusterManagerFixSlotsCoverage(char *all_slots) {
                     CLUSTER_MANAGER_CMD_FLAG_FIX_WITH_UNREACHABLE_MASTERS;
 
     if (cluster_manager.unreachable_masters > 0 && !force_fix) {
-        clusterManagerLogWarn("*** Fixing slots coverage with %d unreachable masters is dangerous: valkey-cli will assume that slots about masters that are not reachable are not covered, and will try to reassign them to the reachable nodes. This can cause data loss and is rarely what you want to do. If you really want to proceed use the --cluster-fix-with-unreachable-masters option.\n", cluster_manager.unreachable_masters);
+        clusterManagerLogWarn("*** Fixing slots coverage with %d unreachable masters is dangerous: memurai-cli will assume that slots about masters that are not reachable are not covered, and will try to reassign them to the reachable nodes. This can cause data loss and is rarely what you want to do. If you really want to proceed use the --cluster-fix-with-unreachable-masters option.\n", cluster_manager.unreachable_masters);
         exit(1);
     }
 
@@ -5942,7 +5988,7 @@ static int clusterManagerFixSlotsCoverage(char *all_slots) {
     for (i = 0; i < CLUSTER_MANAGER_SLOTS; i++) {
         int covered = all_slots[i];
         if (!covered) {
-            sds slot = sdsfromlonglong((long long) i);
+            sds slot = sdsfromlonglong((PORT_LONGLONG) i);
             list *slot_nodes = listCreate();
             sds slot_nodes_str = sdsempty();
             listIter li;
@@ -6134,7 +6180,7 @@ static int clusterManagerFixOpenSlot(int slot) {
                     CLUSTER_MANAGER_CMD_FLAG_FIX_WITH_UNREACHABLE_MASTERS;
 
     if (cluster_manager.unreachable_masters > 0 && !force_fix) {
-        clusterManagerLogWarn("*** Fixing open slots with %d unreachable masters is dangerous: valkey-cli will assume that slots about masters that are not reachable are not covered, and will try to reassign them to the reachable nodes. This can cause data loss and is rarely what you want to do. If you really want to proceed use the --cluster-fix-with-unreachable-masters option.\n", cluster_manager.unreachable_masters);
+        clusterManagerLogWarn("*** Fixing open slots with %d unreachable masters is dangerous: memurai-cli will assume that slots about masters that are not reachable are not covered, and will try to reassign them to the reachable nodes. This can cause data loss and is rarely what you want to do. If you really want to proceed use the --cluster-fix-with-unreachable-masters option.\n", cluster_manager.unreachable_masters);
         exit(1);
     }
 
@@ -6445,7 +6491,7 @@ static int clusterManagerFixOpenSlot(int slot) {
         } else {
 unhandled_case:
             success = 0;
-            clusterManagerLogErr("[ERR] Sorry, valkey-cli can't fix this slot "
+            clusterManagerLogErr("[ERR] Sorry, memurai-cli can't fix this slot "
                                  "yet (work in progress). Slot is set as "
                                  "migrating in %s, as importing in %s, "
                                  "owner is %s:%d\n", migrating_str,
@@ -6900,7 +6946,7 @@ static int clusterManagerCommandCreate(int argc, char **argv) {
     if (masters_count < 3) {
         clusterManagerLogErr(
             "*** ERROR: Invalid configuration for cluster creation.\n"
-            "*** Valkey Cluster requires at least 3 master nodes.\n"
+            "*** Memurai Cluster requires at least 3 master nodes.\n"
             "*** This is not possible with %d nodes and %d replicas per node.",
             node_len, replicas);
         clusterManagerLogErr("\n*** At least %d nodes are required.\n",
@@ -6948,15 +6994,15 @@ static int clusterManagerCommandCreate(int argc, char **argv) {
     interleaved += masters_count;
     interleaved_len -= masters_count;
     float slots_per_node = CLUSTER_MANAGER_SLOTS / (float) masters_count;
-    long first = 0;
+    PORT_LONG first = 0;
     float cursor = 0.0f;
     for (i = 0; i < masters_count; i++) {
         clusterManagerNode *master = masters[i];
-        long last = lround(cursor + slots_per_node - 1);
+        PORT_LONG last = lround(cursor + slots_per_node - 1);
         if (last > CLUSTER_MANAGER_SLOTS || i == (masters_count - 1))
             last = CLUSTER_MANAGER_SLOTS - 1;
         if (last < first) last = first;
-        printf("Master[%d] -> Slots %ld - %ld\n", i, first, last);
+        printf("Master[%d] -> Slots %zd - %zd\n", i, first, last);      WIN_PORT_FIX /* %ld -> %zd (x2) */
         master->slots_count = 0;
         for (j = first; j <= last; j++) {
             master->slots[j] = 1;
@@ -7220,7 +7266,7 @@ static int clusterManagerCommandAddNode(int argc, char **argv) {
         reply = CLUSTER_MANAGER_COMMAND(refnode, "FUNCTION DUMP");
         if (!clusterManagerCheckRedisReply(refnode, reply, &err)) {
             clusterManagerLogInfo(">>> Failed retrieving Functions from the cluster, "
-                    "skip this step as Valkey version do not support function command (error = '%s')\n", err? err : "NULL reply");
+                    "skip this step as Memurai version do not support function command (error = '%s')\n", err? err : "NULL reply");
             if (err) zfree(err);
         } else {
             assert(reply->type == REDIS_REPLY_STRING);
@@ -7457,7 +7503,7 @@ static int clusterManagerCommandReshard(int argc, char **argv) {
                "the hash slots.\n");
         printf("  Type 'done' once you entered all the source nodes IDs.\n");
         while (1) {
-            printf("Source node #%lu: ", listLength(sources) + 1);
+            printf("Source node #%zu: ", listLength(sources) + 1);          WIN_PORT_FIX /* %lu -> %zu */
             fflush(stdout);
             int nread = read(fileno(stdin),buf,255);
             if (nread <= 0) continue;
@@ -7871,7 +7917,7 @@ static int clusterManagerCommandImport(int argc, char **argv) {
     redisContext *src_ctx = redisConnect(src_ip, src_port);
     if (src_ctx->err) {
         success = 0;
-        fprintf(stderr,"Could not connect to Valkey at %s:%d: %s.\n", src_ip,
+        fprintf(stderr,"Could not connect to Memurai at %s:%d: %s.\n", src_ip,
                 src_port, src_ctx->errstr);
         goto cleanup;
     }
@@ -8075,7 +8121,7 @@ static int clusterManagerCommandBackup(int argc, char **argv) {
     jsonpath = sdscat(jsonpath, "nodes.json");
     fflush(stdout);
     clusterManagerLogInfo("Saving cluster configuration to: %s\n", jsonpath);
-    FILE *out = fopen(jsonpath, "w+");
+    FILE *out = fopen(jsonpath, IF_WIN32("w+b", "w+"));
     if (!out) {
         clusterManagerLogErr("Could not save nodes to: %s\n", jsonpath);
         success = 0;
@@ -8160,7 +8206,7 @@ static int clusterManagerCommandHelp(int argc, char **argv) {
  * Latency and latency history modes
  *--------------------------------------------------------------------------- */
 
-static void latencyModePrint(long long min, long long max, double avg, long long count) {
+static void latencyModePrint(PORT_LONGLONG min, PORT_LONGLONG max, double avg, PORT_LONGLONG count) {
     if (config.output == OUTPUT_STANDARD) {
         printf("min: %lld, max: %lld, avg: %.2f (%lld samples)",
                 min, max, avg, count);
@@ -8178,12 +8224,12 @@ static void latencyModePrint(long long min, long long max, double avg, long long
 #define LATENCY_HISTORY_DEFAULT_INTERVAL 15000 /* milliseconds. */
 static void latencyMode(void) {
     redisReply *reply;
-    long long start, latency, min = 0, max = 0, tot = 0, count = 0;
-    long long history_interval =
+    PORT_LONGLONG start, latency, min = 0, max = 0, tot = 0, count = 0;
+    PORT_LONGLONG history_interval =
         config.interval ? config.interval/1000 :
                           LATENCY_HISTORY_DEFAULT_INTERVAL;
     double avg;
-    long long history_start = mstime();
+    PORT_LONGLONG history_start = mstime();
 
     /* Set a default for the interval in case of --latency option
      * with --raw, --csv or when it is redirected to non tty. */
@@ -8244,8 +8290,8 @@ static void latencyMode(void) {
 
 /* Structure to store samples distribution. */
 struct distsamples {
-    long long max;   /* Max latency to fit into this interval (usec). */
-    long long count; /* Number of samples in this interval. */
+    PORT_LONGLONG max;   /* Max latency to fit into this interval (usec). */
+    PORT_LONGLONG count; /* Number of samples in this interval. */
     int character;   /* Associated character in visualization. */
 };
 
@@ -8260,7 +8306,7 @@ struct distsamples {
  * is the SUM(samples[i].count) for i to 0 up to the max sample.
  *
  * As a side effect the function sets all the buckets count to 0. */
-void showLatencyDistSamples(struct distsamples *samples, long long tot) {
+void showLatencyDistSamples(struct distsamples *samples, PORT_LONGLONG tot) {
     int j;
 
      /* We convert samples into an index inside the palette
@@ -8302,11 +8348,11 @@ void showLatencyDistLegend(void) {
 
 static void latencyDistMode(void) {
     redisReply *reply;
-    long long start, latency, count = 0;
-    long long history_interval =
+    PORT_LONGLONG start, latency, count = 0;
+    PORT_LONGLONG history_interval =
         config.interval ? config.interval/1000 :
                           LATENCY_DIST_DEFAULT_INTERVAL;
-    long long history_start = ustime();
+    PORT_LONGLONG history_start = ustime();
     int j, outputs = 0;
 
     struct distsamples samples[] = {
@@ -8428,7 +8474,7 @@ static ssize_t readConn(redisContext *c, char *buf, size_t len)
  * is unknown, also returns 0 in case a PSYNC +CONTINUE was found (no RDB payload).
  *
  * The out_full_mode parameter if 1 means this is a full sync, if 0 means this is partial mode. */
-unsigned long long sendSync(redisContext *c, int send_sync, char *out_eof, int *out_full_mode) {
+PORT_ULONGLONG sendSync(redisContext *c, int send_sync, char *out_eof, int *out_full_mode) {
     /* To start we need to send the SYNC command and return the payload.
      * The hiredis client lib does not understand this part of the protocol
      * and we don't want to mess with its buffers, so everything is performed
@@ -8509,7 +8555,7 @@ static void slaveMode(int send_sync) {
     static char lastbytes[RDB_EOF_MARK_SIZE];
     static int usemark = 0;
     static int out_full_mode;
-    unsigned long long payload = sendSync(context, send_sync, eofmark, &out_full_mode);
+    PORT_ULONGLONG payload = sendSync(context, send_sync, eofmark, &out_full_mode);
     char buf[1024];
     int original_output = config.output;
     char *info = out_full_mode ? "Full resync" : "Partial resync";
@@ -8556,7 +8602,7 @@ static void slaveMode(int send_sync) {
     }
 
     if (usemark) {
-        unsigned long long offset = ULLONG_MAX - payload;
+        PORT_ULONGLONG offset = ULLONG_MAX - payload;
         fprintf(stderr,"%s done after %llu bytes. Logging commands from master.\n", info, offset);
         /* put the slave online */
         sleep(1);
@@ -8591,7 +8637,7 @@ static void getRDB(clusterManagerNode *node) {
     static char eofmark[RDB_EOF_MARK_SIZE];
     static char lastbytes[RDB_EOF_MARK_SIZE];
     static int usemark = 0;
-    unsigned long long payload = sendSync(s, 1, eofmark, NULL);
+    PORT_ULONGLONG payload = sendSync(s, 1, eofmark, NULL);
     char buf[4096];
 
     if (payload == 0) {
@@ -8610,7 +8656,7 @@ static void getRDB(clusterManagerNode *node) {
     if (write_to_stdout) {
         fd = STDOUT_FILENO;
     } else {
-        fd = open(filename, O_CREAT|O_WRONLY, 0644);
+        fd = open(filename, O_CREAT|O_WRONLY WIN32_ONLY(|_O_BINARY), IF_WIN32(_S_IWRITE,0644));
         if (fd == -1) {
             fprintf(stderr, "Error opening '%s': %s\n", filename,
                 strerror(errno));
@@ -8676,7 +8722,7 @@ static void getRDB(clusterManagerNode *node) {
 
 #define PIPEMODE_WRITE_LOOP_MAX_BYTES (128*1024)
 static void pipeMode(void) {
-    long long errors = 0, replies = 0, obuf_len = 0, obuf_pos = 0;
+    PORT_LONGLONG errors = 0, replies = 0, obuf_len = 0, obuf_pos = 0;
     char obuf[1024*16]; /* Output buffer */
     char aneterr[ANET_ERR_LEN];
     redisReply *reply;
@@ -8685,7 +8731,12 @@ static void pipeMode(void) {
     char magic[20]; /* Special reply we recognize. */
     time_t last_read_time = time(NULL);
 
-    srand(time(NULL));
+#ifdef _WIN32
+    /* Prevent translation or CRLF sequences. */
+    setmode(STDIN_FILENO,_O_BINARY);
+#endif
+
+    srand((unsigned int)time(NULL));                                            WIN_PORT_FIX /* cast unsigned int */
 
     /* Use non blocking I/O. */
     if (anetNonBlock(aneterr,context->fd) == ANET_ERR) {
@@ -8833,7 +8884,7 @@ static void pipeMode(void) {
  * Find big keys
  *--------------------------------------------------------------------------- */
 
-static redisReply *sendScan(unsigned long long *it) {
+static redisReply *sendScan(PORT_ULONGLONG *it) {
     redisReply *reply;
 
     if (config.pattern)
@@ -8896,9 +8947,9 @@ typedef struct {
     char *name;
     char *sizecmd;
     char *sizeunit;
-    unsigned long long biggest;
-    unsigned long long count;
-    unsigned long long totalsize;
+    PORT_ULONGLONG biggest;
+    PORT_ULONGLONG count;
+    PORT_ULONGLONG totalsize;
     sds biggest_key;
 } typeinfo;
 
@@ -8979,7 +9030,7 @@ static void getKeyTypes(dict *types_dict, redisReply *keys, typeinfo **types) {
 }
 
 static void getKeySizes(redisReply *keys, typeinfo **types,
-                        unsigned long long *sizes, int memkeys,
+                        PORT_ULONGLONG *sizes, int memkeys,
                         unsigned memkeys_samples)
 {
     redisReply *reply;
@@ -9043,7 +9094,7 @@ static void longStatLoopModeStop(int s) {
 }
 
 static void findBigKeys(int memkeys, unsigned memkeys_samples) {
-    unsigned long long sampled = 0, total_keys, totlen=0, *sizes=NULL, it=0, scan_loops = 0;
+    PORT_ULONGLONG sampled = 0, total_keys, totlen=0, *sizes=NULL, it=0, scan_loops = 0;
     redisReply *reply, *keys;
     unsigned int arrsize=0, i;
     dictIterator *di;
@@ -9081,7 +9132,7 @@ static void findBigKeys(int memkeys, unsigned memkeys_samples) {
         /* Reallocate our type and size array if we need to */
         if(keys->elements > arrsize) {
             types = zrealloc(types, sizeof(typeinfo*)*keys->elements);
-            sizes = zrealloc(sizes, sizeof(unsigned long long)*keys->elements);
+            sizes = zrealloc(sizes, sizeof(PORT_ULONGLONG)*keys->elements);
 
             if(!types || !sizes) {
                 fprintf(stderr, "Failed to allocate storage for keys!\n");
@@ -9179,7 +9230,7 @@ static void findBigKeys(int memkeys, unsigned memkeys_samples) {
     exit(0);
 }
 
-static void getKeyFreqs(redisReply *keys, unsigned long long *freqs) {
+static void getKeyFreqs(redisReply *keys, PORT_ULONGLONG *freqs) {
     redisReply *reply;
     unsigned int i;
 
@@ -9218,9 +9269,9 @@ static void getKeyFreqs(redisReply *keys, unsigned long long *freqs) {
 #define HOTKEYS_SAMPLE 16
 static void findHotKeys(void) {
     redisReply *keys, *reply;
-    unsigned long long counters[HOTKEYS_SAMPLE] = {0};
+    PORT_ULONGLONG counters[HOTKEYS_SAMPLE] = {0};
     sds hotkeys[HOTKEYS_SAMPLE] = {NULL};
-    unsigned long long sampled = 0, total_keys, *freqs = NULL, it = 0, scan_loops = 0;
+    PORT_ULONGLONG sampled = 0, total_keys, *freqs = NULL, it = 0, scan_loops = 0;
     unsigned int arrsize = 0, i, k;
     double pct;
 
@@ -9245,7 +9296,7 @@ static void findHotKeys(void) {
 
         /* Reallocate our freqs array if we need to */
         if(keys->elements > arrsize) {
-            freqs = zrealloc(freqs, sizeof(unsigned long long)*keys->elements);
+            freqs = zrealloc(freqs, sizeof(PORT_ULONGLONG)*keys->elements);
 
             if(!freqs) {
                 fprintf(stderr, "Failed to allocate storage for keys!\n");
@@ -9335,11 +9386,11 @@ static char *getInfoField(char *info, char *field) {
 
 /* Like the above function but automatically convert the result into
  * a long. On error (missing field) LONG_MIN is returned. */
-static long getLongInfoField(char *info, char *field) {
+static PORT_LONG getLongInfoField(char *info, char *field) {
     char *value = getInfoField(info,field);
-    long l;
+    PORT_LONG l;
 
-    if (!value) return LONG_MIN;
+    if (!value) return PORT_LONG_MIN;
     l = strtol(value,NULL,10);
     zfree(value);
     return l;
@@ -9347,7 +9398,7 @@ static long getLongInfoField(char *info, char *field) {
 
 /* Convert number of bytes into a human readable string of the form:
  * 100B, 2G, 100M, 4K, and so forth. */
-void bytesToHuman(char *s, size_t size, long long n) {
+void bytesToHuman(char *s, size_t size, PORT_LONGLONG n) {
     double d;
 
     if (n < 0) {
@@ -9373,7 +9424,7 @@ void bytesToHuman(char *s, size_t size, long long n) {
 
 static void statMode(void) {
     redisReply *reply;
-    long aux, requests = 0;
+    PORT_LONG aux, requests = 0;
     int i = 0;
 
     while(1) {
@@ -9398,14 +9449,14 @@ static void statMode(void) {
         /* Keys */
         aux = 0;
         for (j = 0; j < 20; j++) {
-            long k;
+            PORT_LONG k;
 
             snprintf(buf,sizeof(buf),"db%d:keys",j);
             k = getLongInfoField(reply->str,buf);
-            if (k == LONG_MIN) continue;
+            if (k == PORT_LONG_MIN) continue;
             aux += k;
         }
-        snprintf(buf,sizeof(buf),"%ld",aux);
+        snprintf(buf,sizeof(buf),"%zd",aux);           WIN_PORT_FIX /* %ld -> %zd */
         printf("%-11s",buf);
 
         /* Used memory */
@@ -9415,23 +9466,23 @@ static void statMode(void) {
 
         /* Clients */
         aux = getLongInfoField(reply->str,"connected_clients");
-        snprintf(buf,sizeof(buf),"%ld",aux);
+        snprintf(buf,sizeof(buf),"%zd",aux);           WIN_PORT_FIX /* %ld -> %zd */
         printf(" %-8s",buf);
 
         /* Blocked (BLPOPPING) Clients */
         aux = getLongInfoField(reply->str,"blocked_clients");
-        snprintf(buf,sizeof(buf),"%ld",aux);
+        snprintf(buf,sizeof(buf),"%zd",aux);           WIN_PORT_FIX /* %ld -> %zd */
         printf("%-8s",buf);
 
         /* Requests */
         aux = getLongInfoField(reply->str,"total_commands_processed");
-        snprintf(buf,sizeof(buf),"%ld (+%ld)",aux,requests == 0 ? 0 : aux-requests);
+        snprintf(buf,sizeof(buf),"%zd (+%zd)",aux,requests == 0 ? 0 : aux-requests);           WIN_PORT_FIX /* %ld -> %zd (x2) */
         printf("%-19s",buf);
         requests = aux;
 
         /* Connections */
         aux = getLongInfoField(reply->str,"total_connections_received");
-        snprintf(buf,sizeof(buf),"%ld",aux);
+        snprintf(buf,sizeof(buf),"%zd",aux);           WIN_PORT_FIX /* %ld -> %zd */
         printf(" %-12s",buf);
 
         /* Children */
@@ -9466,7 +9517,7 @@ static void statMode(void) {
 
 static void scanMode(void) {
     redisReply *reply;
-    unsigned long long cur = 0;
+    PORT_ULONGLONG cur = 0;
     signal(SIGINT, longStatLoopModeStop);
     do {
         reply = sendScan(&cur);
@@ -9497,15 +9548,15 @@ static void scanMode(void) {
  *
  * With alpha = 6.2 the output follows the 80-20 rule where 20% of
  * the returned numbers will account for 80% of the frequency. */
-long long powerLawRand(long long min, long long max, double alpha) {
+PORT_LONGLONG powerLawRand(PORT_LONGLONG min, PORT_LONGLONG max, double alpha) {
     double pl, r;
 
     max += 1;
-    r = ((double)rand()) / RAND_MAX;
+    r = ((double)rand()) / PORT_RAND_MAX;
     pl = pow(
         ((pow(max,alpha+1) - pow(min,alpha+1))*r + pow(min,alpha+1)),
         (1.0/(alpha+1)));
-    return (max-1-(long long)pl)+min;
+    return (max-1-(PORT_LONGLONG)pl)+min;
 }
 
 /* Generates a key name among a set of lru_test_sample_size keys, using
@@ -9520,16 +9571,16 @@ void LRUTestGenKey(char *buf, size_t buflen) {
 static void LRUTestMode(void) {
     redisReply *reply;
     char key[128];
-    long long start_cycle;
+    PORT_LONGLONG start_cycle;
     int j;
 
-    srand(time(NULL)^getpid());
+    srand((unsigned int)(time(NULL)^getpid()));                                   WIN_PORT_FIX /* cast (unsigned int) */
     while(1) {
         /* Perform cycles of 1 second with 50% writes and 50% reads.
          * We use pipelining batching writes / reads N times per cycle in order
          * to fill the target instance easily. */
         start_cycle = mstime();
-        long long hits = 0, misses = 0;
+        PORT_LONGLONG hits = 0, misses = 0;
         while(mstime() - start_cycle < LRU_CYCLE_PERIOD) {
             /* Write cycle. */
             for (j = 0; j < LRU_CYCLE_PIPELINE_SIZE; j++) {
@@ -9589,10 +9640,10 @@ static void LRUTestMode(void) {
 /* This is just some computation the compiler can't optimize out.
  * Should run in less than 100-200 microseconds even using very
  * slow hardware. Runs in less than 10 microseconds in modern HW. */
-unsigned long compute_something_fast(void) {
+PORT_ULONG compute_something_fast(void) {
     unsigned char s[256], i, j, t;
     int count = 1000, k;
-    unsigned long output = 0;
+    PORT_ULONG output = 0;
 
     for (k = 0; k < 256; k++) s[k] = k;
 
@@ -9622,14 +9673,14 @@ static void sigIntHandler(int s) {
 }
 
 static void intrinsicLatencyMode(void) {
-    long long test_end, run_time, max_latency = 0, runs = 0;
+    PORT_LONGLONG test_end, run_time, max_latency = 0, runs = 0;
 
-    run_time = (long long)config.intrinsic_latency_duration * 1000000;
+    run_time = (PORT_LONGLONG)config.intrinsic_latency_duration * 1000000;
     test_end = ustime() + run_time;
     signal(SIGINT, longStatLoopModeStop);
 
     while(1) {
-        long long start, end, latency;
+        PORT_LONGLONG start, end, latency;
 
         start = ustime();
         compute_something_fast();
@@ -9665,6 +9716,44 @@ static sds askPassword(const char *msg) {
     return auth;
 }
 
+#ifdef _WIN32
+/* Set the process HOME environment variable that is used by getDotfilePath() */
+void envSetHOME() {
+    char appDataPath[MAX_PATH+1];
+    sds home = NULL;
+
+    if (getAppDataPathA(&appDataPath[0]) == 0) {
+        home = sdscatprintf(sdsempty(), "%s\\%s", appDataPath, "Memurai\\Memurai-cli");
+        // Test to verify the folder path exists
+        sds testFile = sdscatprintf(sdsempty(), "%s\\_test_", home);
+        FILE *fp = fopen(testFile, "ab");
+        if (fp == NULL) {
+            if (createFolderTreeA(appDataPath, "Memurai", "Memurai-cli", NULL) != 0) {
+                sdsfree(home);
+                home = NULL;
+            }
+        } else {
+            fclose(fp);
+            remove(testFile);
+        }
+    }
+
+    if (home) {
+        int result = _putenv_s("HOME", home);
+        sdsfree(home);
+        if (result == 0) {
+            return;
+        }
+    }
+
+    // Fallback to use the user profile home
+    char* profile = getenv("USERPROFILE");
+    if (profile != NULL && *profile != '\0') {
+        SetEnvironmentVariableA("HOME", profile);
+    }
+}
+#endif
+
 /* Prints out the hint completion string for a given input prefix string. */
 void testHint(const char *input) {
     cliInitHelp();
@@ -9696,7 +9785,7 @@ void testHintSuite(char *filename) {
     int argc;
     char **argv;
 
-    fp = fopen(filename, "r");
+    fp = fopen(filename, IF_WIN32("rb","r"));
     if (!fp) {
         fprintf(stderr,
             "Can't open file '%s': %s\n", filename, strerror(errno));
@@ -9756,6 +9845,11 @@ void testHintSuite(char *filename) {
 int main(int argc, char **argv) {
     int firstarg;
     struct timeval tv;
+
+#ifdef _WIN32
+    InitializeVTEmulation();
+    envSetHOME();
+#endif
 
     memset(&config.sslconfig, 0, sizeof(config.sslconfig));
     config.conn_info.hostip = sdsnew("127.0.0.1");
@@ -9864,7 +9958,7 @@ int main(int argc, char **argv) {
 #endif
 
     gettimeofday(&tv, NULL);
-    init_genrand64(((long long) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
+    init_genrand64(((PORT_LONGLONG) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
 
     /* Cluster Manager mode */
     if (CLUSTER_MANAGER_MODE()) {

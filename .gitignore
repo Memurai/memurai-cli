@@ -10,12 +10,16 @@ dump.rdb
 *-check-aof
 *-check-rdb
 *-check-dump
-*-cli
 *-sentinel
 *-server
 *-unit-tests
 doc-tools
 release
+bin/
+obj/
+Debug/
+Release/
+x64/
 misc/*
 src/release.h
 appendonly.aof*
@@ -36,6 +40,8 @@ tests/tls/*
 .prerequisites
 *.dSYM
 Makefile.dep
+*.user
+*.exe
 .vscode/*
 .idea/*
 .ccls
@@ -47,3 +53,8 @@ redis.code-workspace
 .swp
 nodes.conf
 tests/cluster/tmp/*
+*.sdf
+*.suo
+msvs/ipch
+.vs/
+src/memurai-cli

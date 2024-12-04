@@ -443,8 +443,13 @@
 ** functions to consume unlimited stack space. (must be smaller than
 ** -LUA_REGISTRYINDEX)
 */
-#define LUAI_MAXCSTACK	8000
 
+// Reduce Stack limit in Debug mode.
+#if defined(_WIN32) && defined(_DEBUG)
+#define LUAI_MAXCSTACK	800
+#else
+#define LUAI_MAXCSTACK	8000
+#endif
 
 
 /*
@@ -592,7 +597,7 @@ union luai_Cast { double l_d; long l_l; };
 ** aligned in 16-byte boundaries, then you should add long double in the
 ** union.) Probably you do not need to change this.
 */
-#define LUAI_USER_ALIGNMENT_T	union { double u; void *s; long l; }
+#define LUAI_USER_ALIGNMENT_T	union { double u; void *s; long long l; } // WIN_PORT_FIX: long -> long long
 
 
 /*
@@ -735,6 +740,10 @@ union luai_Cast { double l_d; long l_l; };
 @* modifier.
 ** CHANGE them if your system supports long long or does not support long.
 */
+
+#ifdef _Win32
+#define LUA_USELONGLONG
+#endif
 
 #if defined(LUA_USELONGLONG)
 

@@ -43,6 +43,11 @@
 extern "C" {
 #endif
 
+#ifdef _WIN32
+#define STDIN_FILENO    (_fileno(stdin))
+#define STDOUT_FILENO   (_fileno(stdout))
+#endif
+
 typedef struct linenoiseCompletions {
   size_t len;
   char **cvec;

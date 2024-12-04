@@ -56,6 +56,7 @@
 int __redisAppendCommand(redisContext *c, const char *cmd, size_t len);
 void __redisSetError(redisContext *c, int type, const char *str);
 
+#ifdef REMOVED_SERVER_CODE
 /* Functions managing dictionary of callbacks for pub/sub. */
 static unsigned int callbackHash(const void *key) {
     return dictGenHashFunction((const unsigned char *)key,
@@ -157,6 +158,7 @@ oom:
     if (patterns) dictRelease(patterns);
     return NULL;
 }
+#endif
 
 /* We want the error field to be accessible directly instead of requiring
  * an indirection to the redisContext struct. */
@@ -169,6 +171,7 @@ static void __redisAsyncCopyError(redisAsyncContext *ac) {
     ac->errstr = c->errstr;
 }
 
+#ifdef REMOVED_SERVER_CODE
 redisAsyncContext *redisAsyncConnectWithOptions(const redisOptions *options) {
     redisOptions myOptions = *options;
     redisContext *c;
@@ -226,6 +229,7 @@ redisAsyncContext *redisAsyncConnectUnix(const char *path) {
     REDIS_OPTIONS_SET_UNIX(&options, path);
     return redisAsyncConnectWithOptions(&options);
 }
+#endif // REMOVED_SERVER_CODE
 
 static int
 redisAsyncSetConnectCallbackImpl(redisAsyncContext *ac, redisConnectCallback *fn,
@@ -713,7 +717,15 @@ void redisAsyncRead(redisAsyncContext *ac) {
         __redisAsyncDisconnect(ac);
     } else {
         /* Always re-schedule reads */
+#ifdef _WIN32
+        // There appears to be a bug in the Linux version of _EL_ADD_READ which will not reschedule
+        // the read if already reading. This is a problem if there is a large number of async GET
+        // operations. If the receive buffer is exhausted with the data returned, the read would
+        // not be rescheduled, and the async operations would cease. This forces the read to recur.
+        _EL_FORCE_ADD_READ(ac);
+#else
         _EL_ADD_READ(ac);
+#endif
         redisProcessCallbacks(ac);
     }
 }
@@ -993,7 +1005,7 @@ int redisAsyncCommand(redisAsyncContext *ac, redisCallbackFn *fn, void *privdata
 
 int redisAsyncCommandArgv(redisAsyncContext *ac, redisCallbackFn *fn, void *privdata, int argc, const char **argv, const size_t *argvlen) {
     hisds cmd;
-    long long len;
+    PORT_LONGLONG len;
     int status;
     len = redisFormatSdsCommandArgv(&cmd,argc,argv,argvlen);
     if (len < 0)

@@ -37,6 +37,8 @@
 #define REDIS_ERR -1
 #define REDIS_OK 0
 
+#include "../../src/Win32_Interop/win32_types_hiredis.h"
+
 /* When an error occurs, the err flag in a context is set to hold the type of
  * error that occurred. REDIS_ERR_IO means there was an I/O error and you
  * should use the "errno" variable to find out what is wrong.
@@ -75,7 +77,7 @@ extern "C" {
 
 typedef struct redisReadTask {
     int type;
-    long long elements; /* number of elements in multibulk container */
+    PORT_LONGLONG elements; /* number of elements in multibulk container */
     int idx; /* index in parent (array) object */
     void *obj; /* holds user-generated value for a read task */
     struct redisReadTask *parent; /* parent task */
@@ -85,7 +87,7 @@ typedef struct redisReadTask {
 typedef struct redisReplyObjectFunctions {
     void *(*createString)(const redisReadTask*, char*, size_t);
     void *(*createArray)(const redisReadTask*, size_t);
-    void *(*createInteger)(const redisReadTask*, long long);
+    void *(*createInteger)(const redisReadTask*, PORT_LONGLONG);
     void *(*createDouble)(const redisReadTask*, double, char*, size_t);
     void *(*createNil)(const redisReadTask*);
     void *(*createBool)(const redisReadTask*, int);
@@ -100,7 +102,7 @@ typedef struct redisReader {
     size_t pos; /* Buffer cursor */
     size_t len; /* Buffer length */
     size_t maxbuf; /* Max length of unused buffer */
-    long long maxelements; /* Max multi-bulk elements */
+    PORT_LONGLONG maxelements; /* Max multi-bulk elements */
 
     redisReadTask **task;
     int tasks;

@@ -30,6 +30,10 @@
 
 #include "fmacros.h"
 #include "cli_common.h"
+
+#include "Win32_Interop/Win32_Portability.h"
+#include "Win32_Interop/win32_types_hiredis.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -37,13 +41,31 @@
 #include <hiredis.h>
 #include <sdscompat.h> /* Use hiredis' sds compat header that maps sds calls to their hi_ variants */
 #include <sds.h> /* use sds.h from hiredis, so that only one set of sds functions will be present in the binary */
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <string.h>
 #include <ctype.h>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include "Win32_Interop/Win32_Time.h"
+#include "Win32_Interop/Win32_APIs.h"
+#include "Win32_Interop/Win32_FDAPI.h"
+#include "Win32_Interop/Win32_Signal_Process.h"
+#include "Win32_Interop/Win32_ANSI.h"
+#include "Win32_Interop/Win32_WindowsFeatures.h"
+#include <windows.h>
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#define printf ANSI_printf
+#endif
+
 #ifdef USE_OPENSSL
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <hiredis_ssl.h>
+#include <openssl/conf.h>
 #endif
 
 #define UNUSED(V) ((void) V)
@@ -194,6 +216,7 @@ ssize_t cliWriteConn(redisContext *c, const char *buf, size_t buf_len)
 int cliSecureInit(void)
 {
 #ifdef USE_OPENSSL
+    WIN32_ONLY(OPENSSL_no_config());
     ERR_load_crypto_strings();
     SSL_load_error_strings();
     SSL_library_init();

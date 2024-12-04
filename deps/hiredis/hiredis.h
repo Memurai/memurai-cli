@@ -39,7 +39,7 @@
 #include <sys/time.h> /* for struct timeval */
 #else
 struct timeval; /* forward declaration */
-typedef long long ssize_t;
+typedef PORT_LONGLONG ssize_t;
 #endif
 #include <stdint.h> /* uintXX_t, etc */
 #include "sds.h" /* for hisds */
@@ -119,7 +119,7 @@ extern "C" {
 /* This is the reply object returned by redisCommand() */
 typedef struct redisReply {
     int type; /* REDIS_REPLY_* */
-    long long integer; /* The integer when type is REDIS_REPLY_INTEGER */
+    PORT_LONGLONG integer; /* The integer when type is REDIS_REPLY_INTEGER */
     double dval; /* The double when type is REDIS_REPLY_DOUBLE */
     size_t len; /* Length of string */
     char *str; /* Used for REDIS_REPLY_ERROR, REDIS_REPLY_STRING
@@ -139,8 +139,8 @@ void freeReplyObject(void *reply);
 /* Functions to format a command according to the protocol. */
 int redisvFormatCommand(char **target, const char *format, va_list ap);
 int redisFormatCommand(char **target, const char *format, ...);
-long long redisFormatCommandArgv(char **target, int argc, const char **argv, const size_t *argvlen);
-long long redisFormatSdsCommandArgv(hisds *target, int argc, const char ** argv, const size_t *argvlen);
+PORT_LONGLONG redisFormatCommandArgv(char **target, int argc, const char **argv, const size_t *argvlen);
+PORT_LONGLONG redisFormatSdsCommandArgv(hisds *target, int argc, const char ** argv, const size_t *argvlen);
 void redisFreeCommand(char *cmd);
 void redisFreeSdsCommand(hisds cmd);
 
@@ -170,17 +170,9 @@ struct redisSsl;
  * representing an invalid descriptor. In Windows it is a SOCKET
  * (32- or 64-bit unsigned integer depending on the architecture), where
  * all bits set (~0) is INVALID_SOCKET.  */
-#ifndef _WIN32
+// WIN_PORT_FIX /* We use FDAPI that emulates Unix fds */
 typedef int redisFD;
 #define REDIS_INVALID_FD -1
-#else
-#ifdef _WIN64
-typedef unsigned long long redisFD; /* SOCKET = 64-bit UINT_PTR */
-#else
-typedef unsigned long redisFD;      /* SOCKET = 32-bit UINT_PTR */
-#endif
-#define REDIS_INVALID_FD ((redisFD)(~0)) /* INVALID_SOCKET */
-#endif
 
 typedef struct {
     /*

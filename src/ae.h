@@ -35,6 +35,8 @@
 
 #include "monotonic.h"
 
+#include "Win32_Interop/win32_types_hiredis.h"
+
 #define AE_OK 0
 #define AE_ERR -1
 
@@ -64,7 +66,7 @@ struct aeEventLoop;
 
 /* Types and data structures */
 typedef void aeFileProc(struct aeEventLoop *eventLoop, int fd, void *clientData, int mask);
-typedef int aeTimeProc(struct aeEventLoop *eventLoop, long long id, void *clientData);
+typedef int aeTimeProc(struct aeEventLoop *eventLoop, PORT_LONGLONG id, void *clientData);
 typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientData);
 typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
@@ -78,7 +80,7 @@ typedef struct aeFileEvent {
 
 /* Time event structure */
 typedef struct aeTimeEvent {
-    long long id; /* time event identifier. */
+    PORT_LONGLONG id; /* time event identifier. */
     monotime when;
     aeTimeProc *timeProc;
     aeEventFinalizerProc *finalizerProc;
@@ -99,7 +101,7 @@ typedef struct aeFiredEvent {
 typedef struct aeEventLoop {
     int maxfd;   /* highest file descriptor currently registered */
     int setsize; /* max number of file descriptors tracked */
-    long long timeEventNextId;
+    PORT_LONGLONG timeEventNextId;
     aeFileEvent *events; /* Registered events */
     aeFiredEvent *fired; /* Fired events */
     aeTimeEvent *timeEventHead;
@@ -111,6 +113,7 @@ typedef struct aeEventLoop {
 } aeEventLoop;
 
 /* Prototypes */
+#ifdef REMOVED_SERVER_CODE
 aeEventLoop *aeCreateEventLoop(int setsize);
 void aeDeleteEventLoop(aeEventLoop *eventLoop);
 void aeStop(aeEventLoop *eventLoop);
@@ -119,12 +122,14 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
 void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask);
 int aeGetFileEvents(aeEventLoop *eventLoop, int fd);
 void *aeGetFileClientData(aeEventLoop *eventLoop, int fd);
-long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
+PORT_LONGLONG aeCreateTimeEvent(aeEventLoop *eventLoop, PORT_LONGLONG milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc);
-int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id);
+int aeDeleteTimeEvent(aeEventLoop *eventLoop, PORT_LONGLONG id);
 int aeProcessEvents(aeEventLoop *eventLoop, int flags);
-int aeWait(int fd, int mask, long long milliseconds);
+#endif // REMOVED_SERVER_CODE
+int aeWait(int fd, int mask, PORT_LONGLONG milliseconds);
+#ifdef REMOVED_SERVER_CODE
 void aeMain(aeEventLoop *eventLoop);
 char *aeGetApiName(void);
 void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep);
@@ -132,5 +137,6 @@ void aeSetAfterSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *aftersleep);
 int aeGetSetSize(aeEventLoop *eventLoop);
 int aeResizeSetSize(aeEventLoop *eventLoop, int setsize);
 void aeSetDontWait(aeEventLoop *eventLoop, int noWait);
+#endif // REMOVED_SERVER_CODE
 
 #endif

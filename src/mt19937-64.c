@@ -65,12 +65,12 @@
 
 
 /* The array for the state vector */
-static unsigned long long mt[NN];
+static PORT_ULONGLONG mt[NN];
 /* mti==NN+1 means mt[NN] is not initialized */
 static int mti=NN+1;
 
 /* initializes mt[NN] with a seed */
-void init_genrand64(unsigned long long seed)
+void init_genrand64(PORT_ULONGLONG seed)
 {
     mt[0] = seed;
     for (mti=1; mti<NN; mti++)
@@ -80,10 +80,10 @@ void init_genrand64(unsigned long long seed)
 /* initialize by an array with array-length */
 /* init_key is the array for initializing keys */
 /* key_length is its length */
-void init_by_array64(unsigned long long init_key[],
-                     unsigned long long key_length)
+void init_by_array64(PORT_ULONGLONG init_key[],
+                     PORT_ULONGLONG key_length)
 {
-    unsigned long long i, j, k;
+    PORT_ULONGLONG i, j, k;
     init_genrand64(19650218ULL);
     i=1; j=0;
     k = (NN>key_length ? NN : key_length);
@@ -105,11 +105,11 @@ void init_by_array64(unsigned long long init_key[],
 }
 
 /* generates a random number on [0, 2^64-1]-interval */
-unsigned long long genrand64_int64(void)
+PORT_ULONGLONG genrand64_int64(void)
 {
     int i;
-    unsigned long long x;
-    static unsigned long long mag01[2]={0ULL, MATRIX_A};
+    PORT_ULONGLONG x;
+    static PORT_ULONGLONG mag01[2]={0ULL, MATRIX_A};
 
     if (mti >= NN) { /* generate NN words at one time */
 
@@ -143,9 +143,9 @@ unsigned long long genrand64_int64(void)
 }
 
 /* generates a random number on [0, 2^63-1]-interval */
-long long genrand64_int63(void)
+PORT_LONGLONG genrand64_int63(void)
 {
-    return (long long)(genrand64_int64() >> 1);
+    return (PORT_LONGLONG)(genrand64_int64() >> 1);
 }
 
 /* generates a random number on [0,1]-real-interval */
@@ -170,7 +170,7 @@ double genrand64_real3(void)
 int main(void)
 {
     int i;
-    unsigned long long init[4]={0x12345ULL, 0x23456ULL, 0x34567ULL, 0x45678ULL}, length=4;
+    PORT_ULONGLONG init[4]={0x12345ULL, 0x23456ULL, 0x34567ULL, 0x45678ULL}, length=4;
     init_by_array64(init, length);
     printf("1000 outputs of genrand64_int64()\n");
     for (i=0; i<1000; i++) {

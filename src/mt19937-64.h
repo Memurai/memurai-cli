@@ -56,21 +56,23 @@
 #ifndef __MT19937_64_H
 #define __MT19937_64_H
 
+#include "Win32_Interop/win32_types_hiredis.h"
+
 /* initializes mt[NN] with a seed */
-void init_genrand64(unsigned long long seed);
+void init_genrand64(PORT_ULONGLONG seed);
 
 /* initialize by an array with array-length */
 /* init_key is the array for initializing keys */
 /* key_length is its length */
-void init_by_array64(unsigned long long init_key[],
-                     unsigned long long key_length);
+void init_by_array64(PORT_ULONGLONG init_key[],
+                     PORT_ULONGLONG key_length);
 
 /* generates a random number on [0, 2^64-1]-interval */
-unsigned long long genrand64_int64(void);
+PORT_ULONGLONG genrand64_int64(void);
 
 
 /* generates a random number on [0, 2^63-1]-interval */
-long long genrand64_int63(void);
+PORT_LONGLONG genrand64_int63(void);
 
 /* generates a random number on [0,1]-real-interval */
 double genrand64_real1(void);
